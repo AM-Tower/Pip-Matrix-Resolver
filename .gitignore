@@ -1,0 +1,19 @@
+# Ignore build directories
+/build/
+/build*/
+
+# Ignore CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Ignore Ninja build files
+.ninja_deps
+.ninja_log
+
+# Ignore Qt Creator/VS build artifacts
+*.user
+*.pro.user
+*.qtcsettings
+*.autosave
