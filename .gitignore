@@ -1,19 +1,65 @@
-# Ignore build directories
-/build/
-/build*/
+# =========================
+# Qt / CMake / Visual Studio
+# =========================
 
-# Ignore CMake generated files
-CMakeFiles/
-CMakeCache.txt
+# Build directories
+build/
+build-*/
+[Cc]MakeCache.txt
+[Cc]MakeFiles/
 cmake_install.cmake
 Makefile
+*.cmake
+*.ninja
+.ninja_*
 
-# Ignore Ninja build files
-.ninja_deps
-.ninja_log
-
-# Ignore Qt Creator/VS build artifacts
-*.user
+# Qt Creator / Qt build artifacts
 *.pro.user
+*.qbs.user
+*.qbs.user.*
+*.qmlproject.user
 *.qtcsettings
 *.autosave
+
+# Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.ipch
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.log
+*.tlog
+*.lastbuildstate
+*.cachefile
+*.VC.db-shm
+*.VC.db-wal
+
+# Visual Studio generated folders
+/.vs/
+/Debug/
+/Release/
+/x64/
+/x86/
+/[Ww][Ii][Nn]32/
+
+# Qt Linguist / translation binaries
+*.qm
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Python virtualenvs (if you use them in your workflow)
+.venv/
+.venvs/
