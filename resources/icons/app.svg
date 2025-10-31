@@ -1,0 +1,12 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="256" height="256" fill="#1A1A2E"/>
+<path d="M128 40L128 216" stroke="#00C4FF" stroke-width="8" stroke-linecap="round"/>
+<path d="M40 128L216 128" stroke="#00C4FF" stroke-width="8" stroke-linecap="round"/>
+<circle cx="128" cy="128" r="100" stroke="#00C4FF" stroke-width="8"/>
+<circle cx="128" cy="128" r="50" stroke="#00C4FF" stroke-width="8"/>
+<circle cx="128" cy="128" r="75" stroke="#00C4FF" stroke-width="8"/>
+<circle cx="128" cy="128" r="25" stroke="#00C4FF" stroke-width="8"/>
+<path d="M178.682 99.3179C178.682 115.118 165.682 128.118 149.882 128.118C134.082 128.118 121.082 115.118 121.082 99.3179C121.082 83.5179 134.082 70.5179 149.882 70.5179C165.682 70.5179 178.682 83.5179 178.682 99.3179Z" fill="#00FF99"/>
+<path d="M110.318 156.682C110.318 172.482 97.3179 185.482 81.5179 185.482C65.7179 185.482 52.7179 172.482 52.7179 156.682C52.7179 140.882 65.7179 127.882 81.5179 127.882C97.3179 127.882 110.318 140.882 110.318 156.682Z" fill="#00FF99"/>
+<path d="M149.882 128.118L110.318 156.682" stroke="#00FF99" stroke-width="6" stroke-linecap="round"/>
+</svg>
