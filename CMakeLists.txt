@@ -43,7 +43,8 @@ qt_add_executable(PipMatrixResolverQt
     src/BatchRunner.cpp
     src/BatchRunner.h
     ${APP_RESOURCES}   # compiled qrc
-    ${QM_FILES}        # ensures .qm files are built before linking
+    ${QM_FILES}
+    README.md        # ensures .qm files are built before linking
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
