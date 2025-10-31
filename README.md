@@ -3,19 +3,22 @@ PipMatrixResolverQt
 A cross platform Qt 6.10 C++ GUI for resolving Python requirements.txt matrices, managing virtual environments, and running batch multimedia conversions.
 
 Features
-- Resolve Python dependency matrices with pip-tools
-- Manage virtual environments (create, upgrade pip and pip-tools)
-- Batch convert audio + image to MP4 with ffmpeg
-- Qt GUI with menus, log view, progress bar
-- Translation support (English and Spanish)
+
+* Resolve Python dependency matrices with pip-tools
+* Manage virtual environments (create, upgrade pip and pip-tools)
+* Batch convert audio + image to MP4 with ffmpeg
+* Qt GUI with menus, log view, progress bar
+* Translation support (English and Spanish)
 
 Build Instructions
-cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/mingw_64"
+cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
 cmake --build build
 
 On Windows, windeployqt is run automatically after build.
 
 Project Tree
+
+```
 PipMatrixResolver/
 ├── CMakeLists.txt
 ├── PipMatrixResolverQt.qrc
@@ -44,9 +47,11 @@ PipMatrixResolver/
 │   ├── BatchRunner.cpp
 │   └── BatchRunner.h
 ├── translations/
-│   ├── PipMatrixResolverQt_en.ts
-│   └── PipMatrixResolverQt_es.ts
+│   ├── PipMatrixResolverQt\_en.ts
+│   └── PipMatrixResolverQt\_es.ts
 └── build/
+
+```
 
 File Descriptions
 
@@ -66,8 +71,8 @@ VenvManager.h/.cpp – Creates and manages Python virtual environments. Upgrades
 BatchRunner.h/.cpp – Automates ffmpeg jobs. Enqueues tasks, parses progress, emits job completion signals
 
 translations
-PipMatrixResolverQt_en.ts – English translation source
-PipMatrixResolverQt_es.ts – Spanish translation source
+PipMatrixResolverQt\_en.ts – English translation source
+PipMatrixResolverQt\_es.ts – Spanish translation source
 Both are compiled into qm at build time and embedded
 
 build
@@ -82,3 +87,4 @@ Help → About – Show app info
 
 License
 MIT or your chosen license
+
