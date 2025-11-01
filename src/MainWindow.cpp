@@ -453,4 +453,14 @@ void MainWindow::refreshRecentMenus()
     }
 }
 
+// In MainWindow.cpp
+void MainWindow::addDummyHistory()
+{
+    historyRecentLocal << "C:/temp/requirements1.txt"
+                       << "C:/temp/requirements2.txt";
+    historyRecentWeb   << "https://example.com/reqs1.txt"
+                     << "https://example.com/reqs2.txt";
+    refreshRecentMenus();
+}
+
 /************** End of MainWindow.cpp *************************/

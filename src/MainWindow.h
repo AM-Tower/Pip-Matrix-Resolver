@@ -36,6 +36,8 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
+    // In MainWindow.h (public section)
+    void addDummyHistory();
 
 private slots:
     void openLocalRequirements();

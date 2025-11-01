@@ -133,27 +133,9 @@
     </property>
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
-
-    <!-- Added recent submenus -->
-    <addaction name="recentLocalMenu"/>
-    <addaction name="recentWebMenu"/>
-
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
-
-   <!-- Definitions for recent submenus -->
-   <widget class="QMenu" name="recentLocalMenu">
-    <property name="title">
-     <string>Recent local files</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="recentWebMenu">
-    <property name="title">
-     <string>Recent web URLs</string>
-    </property>
-   </widget>
-
    <widget class="QMenu" name="menuTools">
     <property name="title">
      <string>&amp;Tools</string>
@@ -313,3 +295,4 @@
  </resources>
  <connections/>
 </ui>
+ 

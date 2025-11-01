@@ -8,39 +8,53 @@
 
 int main(int argc, char *argv[])
 {
-    QApplication theApplication(argc, argv);
+    if (true)
+    {
+        QApplication app(argc, argv);
+        MainWindow w;
 
-    // Register compiled resources
-    Q_INIT_RESOURCE(PipMatrixResolverQt);
+        w.addDummyHistory();   // safe, public call
 
-    // Enable icons in menus globally
-    theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
+        w.show();
+        return app.exec();
+    }
+    else
+    {
+        QApplication theApplication(argc, argv);
 
-    // Set application icon
-    QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
+        // Register compiled resources
+        Q_INIT_RESOURCE(PipMatrixResolverQt);
 
-    // Diagnostics
-    qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
+        // Enable icons in menus globally
+        theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
 
-    // Translation loading
-    const QString languageCode = QLocale::system().name().split('_').first();
-    auto loadTranslator = [&](const QString &baseName) -> bool {
-        QTranslator *tr = new QTranslator(&theApplication);
-        const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
-        if (tr->load(qmFile)) {
-            theApplication.installTranslator(tr);
-            qDebug() << "Loaded translation:" << qmFile;
-            return true;
-        }
-        delete tr;
-        return false;
-    };
+        // Set application icon
+        QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
 
-    loadTranslator("PipMatrixResolverQt");
-    loadTranslator("MatrixUtility");
-    loadTranslator("MatrixHistory");
+        // Diagnostics
+        qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
 
-    MainWindow w;
-    w.show();
-    return theApplication.exec();
+        // Translation loading
+        const QString languageCode = QLocale::system().name().split('_').first();
+        auto loadTranslator = [&](const QString &baseName) -> bool {
+            QTranslator *tr = new QTranslator(&theApplication);
+            const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
+            if (tr->load(qmFile)) {
+                theApplication.installTranslator(tr);
+                qDebug() << "Loaded translation:" << qmFile;
+                return true;
+            }
+            delete tr;
+            return false;
+        };
+
+        loadTranslator("PipMatrixResolverQt");
+        loadTranslator("MatrixUtility");
+        loadTranslator("MatrixHistory");
+
+        MainWindow w;
+        w.show();
+        return theApplication.exec();
+
+    }
 }
