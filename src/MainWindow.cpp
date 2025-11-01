@@ -1,17 +1,18 @@
 /******************************************************************
  * File: MainWindow.cpp
- * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Author: Jeffrey Scott Flesher
  * Description:
  *   Implements the main application window for PipMatrixResolverQt.
- *   Provides menus, toolbar, requirements.txt loading (local & web),
+ *   Provides requirements.txt loading (local & web),
  *   and integration with ResolverEngine, VenvManager, BatchRunner,
  *   MatrixHistory, and MatrixUtility.
  *
- * Version: 0.4
- * Date:    2025-10-31
+ * Version: 0.5
+ * Date:    2025-11-01
  ******************************************************************/
 
 #include "MainWindow.h"
+#include "ui_MainWindow.h"
 #include "ResolverEngine.h"
 #include "VenvManager.h"
 #include "BatchRunner.h"
@@ -21,163 +22,73 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
-#include <QMenuBar>
-#include <QToolBar>
-#include <QStatusBar>
-#include <QSplitter>
-#include <QVBoxLayout>
-#include <QPlainTextEdit>
-#include <QProgressBar>
-#include <QTableView>
-#include <QDir>
+#include <QPushButton>
+#include <QTextBrowser>
+#include <QDialog>
 #include <QDateTime>
+#include <QFileInfo>
+#include <QDir>
 #include <QStandardItemModel>
-#include <QHeaderView>
 
 /******************************************************************
  * Constructor
  ******************************************************************/
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
+    ui(new Ui::MainWindow),
     resolver(new ResolverEngine(this)),
     venv(new VenvManager(this)),
     batch(new BatchRunner(this)),
     requirementsModel(new QStandardItemModel(this)),
-    toolsMenu(nullptr),
-    actionCreateVenv(nullptr),
-    actionResolveMatrix(nullptr),
-    actionPause(nullptr),
-    actionResume(nullptr),
-    actionStop(nullptr),
-    recentWebMenu(nullptr),
-    recentLocalMenu(nullptr),
     hasValidRequirements(false)
 {
-    setupUi();
-    setupMenus();
-    setupToolbar();
+    ui->setupUi(this);
+
+    // Assign pointers from ui
+    requirementsView = ui->requirementsView;
+    matrixView       = ui->matrixView;
+    logView          = ui->logView;
+    progress         = ui->progressBar;
+    historyWidget    = ui->matrixHistoryWidget;
+
     bindSignals();
     applyToolsEnabled(false);
     statusBar()->showMessage(tr("Ready"));
+
+    // Connect menu/toolbar actions defined in .ui
+    connect(ui->actionAbout, &QAction::triggered,
+            this, &MainWindow::showAboutBox);
+    connect(ui->actionViewReadme, &QAction::triggered,
+            this, &MainWindow::showReadmeDialog);
+    connect(ui->actionExit, &QAction::triggered,
+            this, &MainWindow::exitApp);
+
+    connect(ui->actionOpenRequirements, &QAction::triggered,
+            this, &MainWindow::openLocalRequirements);
+    connect(ui->actionFetchRequirements, &QAction::triggered,
+            this, &MainWindow::fetchRequirementsFromUrl);
+
+    connect(ui->actionCreateVenv, &QAction::triggered,
+            this, &MainWindow::createOrUpdateVenv);
+    connect(ui->actionResolveMatrix, &QAction::triggered,
+            this, &MainWindow::startResolve);
+    connect(ui->actionPause, &QAction::triggered,
+            this, &MainWindow::pauseResolve);
+    connect(ui->actionResume, &QAction::triggered,
+            this, &MainWindow::resumeResolve);
+    connect(ui->actionStop, &QAction::triggered,
+            this, &MainWindow::stopResolve);
+
+    connect(ui->actionRunBatch, &QAction::triggered,
+            this, &MainWindow::runBatch);
 }
 
 /******************************************************************
- * setupUi
+ * Destructor
  ******************************************************************/
-void MainWindow::setupUi()
+MainWindow::~MainWindow()
 {
-    auto splitter = new QSplitter(this);
-
-    requirementsView = new QTableView(splitter);
-    requirementsView->setModel(requirementsModel);
-    requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
-    requirementsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    requirementsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    requirementsView->horizontalHeader()->setStretchLastSection(true);
-    requirementsView->verticalHeader()->setVisible(false);
-
-    matrixView = new QTableView(splitter);
-
-    auto bottomSplitter = new QSplitter(Qt::Horizontal, this);
-    logView = new QPlainTextEdit(bottomSplitter);
-    logView->setReadOnly(true);
-    progress = new QProgressBar(bottomSplitter);
-    progress->setRange(0, 100);
-
-    auto central = new QWidget(this);
-    auto layout = new QVBoxLayout(central);
-    layout->addWidget(splitter);
-    layout->addWidget(bottomSplitter);
-    setCentralWidget(central);
-}
-
-/******************************************************************
- * setupMenus
- ******************************************************************/
-void MainWindow::setupMenus()
-{
-    auto fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addAction(QIcon(":/icons/icons/open.svg"),
-                        tr("Open requirements file..."),
-                        this, &MainWindow::openLocalRequirements);
-    fileMenu->addAction(QIcon(":/icons/icons/url.svg"),
-                        tr("Fetch requirements from URL..."),
-                        this, &MainWindow::fetchRequirementsFromUrl);
-
-    recentLocalMenu = fileMenu->addMenu(tr("Recent local files"));
-    recentWebMenu   = fileMenu->addMenu(tr("Recent web URLs"));
-
-    fileMenu->addSeparator();
-    fileMenu->addAction(tr("History..."), this, &MainWindow::openMatrixHistory);
-    fileMenu->addSeparator();
-    fileMenu->addAction(tr("Exit"), this, &MainWindow::exitApp);
-
-    toolsMenu = menuBar()->addMenu(tr("&Tools"));
-    actionCreateVenv    = toolsMenu->addAction(QIcon(":/icons/icons/venv.svg"),
-                                            tr("Create/Update venv"),
-                                            this, &MainWindow::createOrUpdateVenv);
-    actionResolveMatrix = toolsMenu->addAction(QIcon(":/icons/icons/resolve.svg"),
-                                               tr("Resolve matrix"),
-                                               this, &MainWindow::startResolve);
-    actionPause         = toolsMenu->addAction(QIcon(":/icons/icons/pause.svg"),
-                                       tr("Pause"),
-                                       this, &MainWindow::pauseResolve);
-    actionResume        = toolsMenu->addAction(QIcon(":/icons/icons/resume.svg"),
-                                        tr("Resume"),
-                                        this, &MainWindow::resumeResolve);
-    actionStop          = toolsMenu->addAction(QIcon(":/icons/icons/stop.svg"),
-                                      tr("Stop"),
-                                      this, &MainWindow::stopResolve);
-
-    auto batchMenu = menuBar()->addMenu(tr("&Batch"));
-    batchMenu->addAction(QIcon(":/icons/icons/batch.svg"),
-                         tr("Run batch conversion to mp4"),
-                         this, &MainWindow::runBatch);
-
-    auto helpMenu = menuBar()->addMenu(tr("&Help"));
-    helpMenu->addAction(QIcon(":/icons/icons/info.svg"),
-                        tr("About"),
-                        this, [this]()
-                        {
-                            QMessageBox::about(this,
-                                               tr("About Pip Matrix Resolver"),
-                                               tr("<b>Pip Matrix Resolver</b><br>"
-                                                  "Cross-platform Qt tool to resolve "
-                                                  "Python dependency matrices."));
-                        });
-}
-
-/******************************************************************
- * setupToolbar
- ******************************************************************/
-void MainWindow::setupToolbar()
-{
-    auto toolbar = addToolBar(tr("Main Toolbar"));
-    toolbar->addAction(QIcon(":/icons/icons/open.svg"),
-                       tr("Open requirements file..."),
-                       this, &MainWindow::openLocalRequirements);
-    toolbar->addAction(QIcon(":/icons/icons/url.svg"),
-                       tr("Fetch requirements from URL..."),
-                       this, &MainWindow::fetchRequirementsFromUrl);
-    toolbar->addSeparator();
-    toolbar->addAction(QIcon(":/icons/icons/venv.svg"),
-                       tr("Create/Update venv"),
-                       this, &MainWindow::createOrUpdateVenv);
-    toolbar->addAction(QIcon(":/icons/icons/resolve.svg"),
-                       tr("Resolve matrix"),
-                       this, &MainWindow::startResolve);
-    toolbar->addAction(QIcon(":/icons/icons/pause.svg"),
-                       tr("Pause"),
-                       this, &MainWindow::pauseResolve);
-    toolbar->addAction(QIcon(":/icons/icons/resume.svg"),
-                       tr("Resume"),
-                       this, &MainWindow::resumeResolve);
-    toolbar->addAction(QIcon(":/icons/icons/stop.svg"),
-                       tr("Stop"),
-                       this, &MainWindow::stopResolve);
-    toolbar->addAction(QIcon(":/icons/icons/batch.svg"),
-                       tr("Run batch conversion to mp4"),
-                       this, &MainWindow::runBatch);
+    delete ui;
 }
 
 /******************************************************************
@@ -206,90 +117,78 @@ void MainWindow::bindSignals()
 }
 
 /******************************************************************
- * applyToolsEnabled
- ******************************************************************/
-void MainWindow::applyToolsEnabled(bool enabled)
-{
-    hasValidRequirements = enabled;
-    if (actionCreateVenv)    actionCreateVenv->setEnabled(enabled);
-    if (actionResolveMatrix) actionResolveMatrix->setEnabled(enabled);
-    if (actionPause)         actionPause->setEnabled(enabled);
-    if (actionResume)        actionResume->setEnabled(enabled);
-    if (actionStop)          actionStop->setEnabled(enabled);
-}
-
-/******************************************************************
  * openMatrixHistory
  ******************************************************************/
 void MainWindow::openMatrixHistory()
 {
     // Local history import
-    connect(historyPage, &MatrixHistory::localHistoryImported,
-            this, [this](const QString &path)
-            {
+    connect(historyWidget, &MatrixHistory::localHistoryImported,
+            this, [this](const QString &path) {
                 QStringList lines = MatrixUtility::readTextFileLines(path);
                 MatrixUtility::writeTableToModel(requirementsModel, lines);
                 MatrixUtility::ensureViewScrollable(requirementsView);
                 applyToolsEnabled(true);
                 appendLog(tr("Imported requirements from local history: %1").arg(path));
-                stacked->setCurrentWidget(mainPage);
+                ui->mainTabs->setCurrentWidget(ui->tabMain);
             });
 
     // Web history import
-    connect(historyPage, &MatrixHistory::webHistoryImported,
-            this, [this](const QString &url)
-            {
+    connect(historyWidget, &MatrixHistory::webHistoryImported,
+            this, [this](const QString &url) {
                 QByteArray content;
-                if (!MatrixUtility::downloadText(url, content))
-                {
+                if (!MatrixUtility::downloadText(url, content)) {
                     QMessageBox::warning(this, tr("Download failed"),
                                          tr("Failed to fetch requirements from URL:\n%1").arg(url));
                     return;
                 }
-
-                const QStringList lines =
-                    QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
+                const QStringList lines = QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
                 MatrixUtility::writeTableToModel(requirementsModel, lines);
                 MatrixUtility::ensureViewScrollable(requirementsView);
                 applyToolsEnabled(true);
                 appendLog(tr("Imported requirements from web history: %1").arg(url));
-                stacked->setCurrentWidget(mainPage);
+                ui->mainTabs->setCurrentWidget(ui->tabMain);
             });
 
     // Exit back to main window
-    connect(historyPage, &MatrixHistory::exitRequested,
-            this, [this]()
-            {
-                stacked->setCurrentWidget(mainPage);
+    connect(historyWidget, &MatrixHistory::exitRequested,
+            this, [this]() {
+                ui->mainTabs->setCurrentWidget(ui->tabMain);
             });
 
     // Clear history → clear menus too
-    connect(historyPage, &MatrixHistory::historyCleared,
-            this, [this]()
-            {
+    connect(historyWidget, &MatrixHistory::historyCleared,
+            this, [this]() {
                 historyRecentLocal.clear();
                 historyRecentWeb.clear();
                 refreshRecentMenus();
             });
 
-    stacked->setCurrentWidget(historyPage);
+    ui->mainTabs->setCurrentWidget(ui->tabHistory);
 }
-
 /******************************************************************
  * openLocalRequirements
  ******************************************************************/
 void MainWindow::openLocalRequirements()
 {
     QString path = QFileDialog::getOpenFileName(
-        this, tr("Open requirements.txt"), QString(),
-        tr("Text Files (*.txt)"));
+        this,
+        tr("Open requirements.txt"),
+        QString(),
+        tr("Text Files (*.txt)")
+        );
+
     if (path.isEmpty())
         return;
 
     const QStringList lines = MatrixUtility::readTextFileLines(path);
-    if (lines.isEmpty()) {
-        QMessageBox::warning(this, tr("Empty file"),
-                             tr("The selected file is empty or unreadable."));
+
+    if (lines.isEmpty())
+    {
+        QMessageBox::warning(
+            this,
+            tr("Empty file"),
+            tr("The selected file is empty or unreadable.")
+            );
         return;
     }
 
@@ -304,20 +203,29 @@ void MainWindow::openLocalRequirements()
  ******************************************************************/
 void MainWindow::fetchRequirementsFromUrl()
 {
-    Q_ASSERT(requirementsView);
-
     bool ok = false;
     QString inputUrl = QInputDialog::getText(
-        this, tr("Fetch requirements"), tr("Enter URL:"),
-        QLineEdit::Normal, "", &ok);
+        this,
+        tr("Fetch requirements"),
+        tr("Enter URL:"),
+        QLineEdit::Normal,
+        "",
+        &ok
+        );
+
     if (!ok || inputUrl.isEmpty())
         return;
 
     const QString rawUrl = MatrixUtility::normalizeRawUrl(inputUrl);
+
     QByteArray content;
-    if (!MatrixUtility::downloadText(rawUrl, content)) {
-        QMessageBox::warning(this, tr("Download failed"),
-                             tr("Failed to fetch requirements from URL:\n%1").arg(rawUrl));
+    if (!MatrixUtility::downloadText(rawUrl, content))
+    {
+        QMessageBox::warning(
+            this,
+            tr("Download failed"),
+            tr("Failed to fetch requirements from URL:\n%1").arg(rawUrl)
+            );
         return;
     }
 
@@ -380,19 +288,28 @@ void MainWindow::runBatch()
 {
     BatchJob job;
     job.imagePath = QFileDialog::getOpenFileName(
-        this, tr("Select image"), QString(),
-        tr("Images (*.png *.jpg *.jpeg)"));
+        this,
+        tr("Select image"),
+        QString(),
+        tr("Images (*.png *.jpg *.jpeg)")
+        );
+
     if (job.imagePath.isEmpty())
         return;
 
     job.audioPath = QFileDialog::getOpenFileName(
-        this, tr("Select audio"), QString(),
-        tr("Audio Files (*.wav *.mp3)"));
+        this,
+        tr("Select audio"),
+        QString(),
+        tr("Audio Files (*.wav *.mp3)")
+        );
+
     if (job.audioPath.isEmpty())
         return;
 
     QString baseName = QFileInfo(job.imagePath).completeBaseName();
     QString outFile = QDir(MatrixUtility::logsDir()).filePath(baseName + "_output.mp4");
+
     job.outputPath = outFile;
 
     batch->enqueue(job);
@@ -422,64 +339,54 @@ void MainWindow::updateProgress(int percent)
 void MainWindow::showCompiledResult(const QString &path)
 {
     appendLog(tr("Successfully compiled: %1").arg(path));
-    statusBar()->showMessage(tr("Compiled: %1").arg(path), 5000);
+    statusBar()->showMessage(tr("Compiled successfully"));
 }
 
 /******************************************************************
- * refreshRecentMenus
+ * showAboutBox
  ******************************************************************/
-void MainWindow::refreshRecentMenus()
+void MainWindow::showAboutBox()
 {
-    // Clear old actions
-    recentLocalMenu->clear();
-    recentWebMenu->clear();
+    QMessageBox::about(
+        this,
+        tr("About Pip Matrix Resolver"),
+        tr("<b>Pip Matrix Resolver</b><br>"
+           "Cross-platform Qt tool to resolve "
+           "Python dependency matrices.<br>"
+           "Version 0.5")
+        );
+}
 
-    // Local files
-    for (const QString &path : std::as_const(historyRecentLocal))
-    {
-        QAction *act = recentLocalMenu->addAction(path);
-        connect(act, &QAction::triggered, this, [this, path]()
-                {
-                    QStringList lines = MatrixUtility::readTextFileLines(path);
-                    if (lines.isEmpty())
-                    {
-                        QMessageBox::warning(this, tr("Empty file"),
-                                             tr("The selected file is empty "
-                                                "or unreadable."));
-                        return;
-                    }
-                    MatrixUtility::writeTableToModel(requirementsModel, lines);
-                    MatrixUtility::ensureViewScrollable(requirementsView);
-                    applyToolsEnabled(true);
-                    appendLog(tr("Loaded requirements (recent local): %1")
-                                  .arg(path));
-                });
-    }
+/******************************************************************
+ * showReadmeDialog
+ ******************************************************************/
+void MainWindow::showReadmeDialog()
+{
+    QFile file(":/docs/README.md");
+    QString markdown;
 
-    // Web URLs
-    for (const QString &url : std::as_const(historyRecentWeb))
-    {
-        QAction *act = recentWebMenu->addAction(url);
-        connect(act, &QAction::triggered, this, [this, url]()
-                {
-                    QByteArray content;
-                    if (!MatrixUtility::downloadText(url, content))
-                    {
-                        QMessageBox::warning(this, tr("Download failed"),
-                                             tr("Failed to fetch requirements "
-                                                "from URL:\n%1").arg(url));
-                        return;
-                    }
-                    const QStringList lines =
-                        QString::fromUtf8(content).split('\n',
-                                                         Qt::KeepEmptyParts);
-                    MatrixUtility::writeTableToModel(requirementsModel, lines);
-                    MatrixUtility::ensureViewScrollable(requirementsView);
-                    applyToolsEnabled(true);
-                    appendLog(tr("Fetched requirements (recent web): %1")
-                                  .arg(url));
-                });
-    }
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+        markdown = QString::fromUtf8(file.readAll());
+    else
+        markdown = tr("README.md not found in resources.");
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("README"));
+    dialog.resize(700, 500);
+
+    QVBoxLayout layout(&dialog);
+    QTextBrowser viewer(&dialog);
+    viewer.setMarkdown(markdown);
+    viewer.setOpenExternalLinks(true);
+
+    QPushButton closeButton(tr("Close"), &dialog);
+    QObject::connect(&closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+
+    layout.addWidget(&viewer);
+    layout.addWidget(&closeButton);
+    dialog.setLayout(&layout);
+
+    dialog.exec();
 }
 
 /******************************************************************
@@ -490,4 +397,60 @@ void MainWindow::exitApp()
     close();
 }
 
-/************** End of File.cpp **************/
+/******************************************************************
+ * applyToolsEnabled
+ ******************************************************************/
+void MainWindow::applyToolsEnabled(bool enabled)
+{
+    hasValidRequirements = enabled;
+    if (ui->actionCreateVenv)    ui->actionCreateVenv->setEnabled(enabled);
+    if (ui->actionResolveMatrix) ui->actionResolveMatrix->setEnabled(enabled);
+    if (ui->actionPause)         ui->actionPause->setEnabled(enabled);
+    if (ui->actionResume)        ui->actionResume->setEnabled(enabled);
+    if (ui->actionStop)          ui->actionStop->setEnabled(enabled);
+}
+
+/******************************************************************
+ * refreshRecentMenus
+ ******************************************************************/
+void MainWindow::refreshRecentMenus()
+{
+    if (recentLocalMenu) {
+        recentLocalMenu->clear();
+        for (const QString &path : historyRecentLocal)
+        {
+            recentLocalMenu->addAction(path, this, [this, path]()
+            {
+                QStringList lines = MatrixUtility::readTextFileLines(path);
+                MatrixUtility::writeTableToModel(requirementsModel, lines);
+                MatrixUtility::ensureViewScrollable(requirementsView);
+                applyToolsEnabled(true);
+                appendLog(tr("Loaded requirements (recent local): %1").arg(path));
+            });
+        }
+    }
+
+    if (recentWebMenu)
+    {
+        recentWebMenu->clear();
+        for (const QString &url : historyRecentWeb)
+        {
+            recentWebMenu->addAction(url, this, [this, url]()
+            {
+                QByteArray content;
+                if (!MatrixUtility::downloadText(url, content))
+                {
+                    QMessageBox::warning(this, tr("Download failed"), tr("Failed to fetch requirements from URL:\n%1").arg(url));
+                    return;
+                }
+                const QStringList lines = QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
+                MatrixUtility::writeTableToModel(requirementsModel, lines);
+                MatrixUtility::ensureViewScrollable(requirementsView);
+                applyToolsEnabled(true);
+                appendLog(tr("Loaded requirements (recent web): %1").arg(url));
+            });
+        }
+    }
+}
+
+/************** End of MainWindow.cpp *************************/

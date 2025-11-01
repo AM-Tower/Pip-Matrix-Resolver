@@ -1,6 +1,10 @@
-PipMatrixResolverQt
+# PipMatrixResolverQt
 
-A cross platform Qt 6.10 C++ GUI for resolving Python requirements.txt matrices, managing virtual environments, and running batch multimedia conversions.
+## Status:
+* Not working.
+* Just starting this project, and it will take time to get to a working version.
+
+### A cross platform Qt 6.10 C++ GUI for resolving Python requirements.txt matrices, managing virtual environments, and running batch multimedia conversions.
 
 Features
 
@@ -10,13 +14,13 @@ Features
 * Qt GUI with menus, log view, progress bar
 * Translation support (English and Spanish)
 
-Build Instructions
+## Build Instructions
 ```
 cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
 cmake --build build
 ```
 
-On Windows, windeployqt is run automatically after build.
+## On Windows, windeployqt is run automatically after build.
 
 Project Tree
 
@@ -24,17 +28,17 @@ Project Tree
 PipMatrixResolver/
 ├── CMakeLists.txt
 ├── PipMatrixResolverQt.qrc
-├── resources/
-│   └── icons/
-│       ├── open.svg
-│       ├── url.svg
-│       ├── venv.svg
-│       ├── resolve.svg
-│       ├── pause.svg
-│       ├── resume.svg
-│       ├── stop.svg
-│       ├── batch.svg
-│       └── info.svg
+│── icons/
+│   ├── open.svg
+│   ├── url.svg
+│   ├── venv.svg
+│   ├── resolve.svg
+│   ├── pause.svg
+│   ├── resume.svg
+│   ├── stop.svg
+│   ├── batch.svg
+│   ├── info.svg
+│   └── readme.svg
 ├── src/
 │   ├── main.cpp
 │   ├── MainWindow.cpp
@@ -49,13 +53,17 @@ PipMatrixResolver/
 │   ├── BatchRunner.cpp
 │   └── BatchRunner.h
 ├── translations/
-│   ├── PipMatrixResolverQt\_en.ts
-│   └── PipMatrixResolverQt\_es.ts
+│   ├── PipMatrixResolverQt_en.ts
+│   ├── PipMatrixResolverQt_es.ts
+│   ├── MatrixUtility_en.ts
+│   ├── MatrixUtility_es.ts
+│   ├── MatrixHistory_en.ts
+│   └── MatrixHistory_es.ts
 └── build/
 
 ```
 
-File Descriptions
+## File Descriptions
 
 Root
 ```
@@ -100,4 +108,5 @@ Batch → Run batch conversion to mp4 – Combine audio and image into MP4
 Help → About – Show app info
 ```
 
-License: Unlicensed, MIT or your chosen license
+## License: 
+    Unlicensed, MIT or your chosen license

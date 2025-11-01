@@ -45,7 +45,7 @@ qt_add_executable(PipMatrixResolverQt
     src/BatchRunner.cpp
     src/BatchRunner.h
     src/MatrixUtility.h src/MatrixUtility.cpp
-    src/MatrixHistory.h src/MatrixHistory.cpp src/MatrixHistory.ui
+    src/MatrixHistory.h src/MatrixHistory.cpp
 
     ${APP_RESOURCES}
     ${QM_FILES}   # ensures .qm files are built before linking
@@ -60,6 +60,9 @@ target_link_libraries(PipMatrixResolverQt PRIVATE
     Qt6::Svg
 )
 
+target_include_directories(PipMatrixResolverQt PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 # --------------------------------------------------
 # Deployment logic
 # --------------------------------------------------

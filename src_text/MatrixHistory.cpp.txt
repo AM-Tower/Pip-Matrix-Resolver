@@ -232,4 +232,4 @@ void MatrixHistory::maxItemsChanged(int value)
     saveSettings();
 }
 
-/************** End of File.cpp **************/
+/************** End of MatrixHistory.cpp **************************/

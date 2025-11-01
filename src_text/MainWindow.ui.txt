@@ -49,6 +49,16 @@
         </item>
        </layout>
       </widget>
+      <widget class="QWidget" name="tabHistory">
+       <attribute name="title">
+        <string>History</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="historyLayout">
+        <item>
+         <widget class="MatrixHistory" name="matrixHistoryWidget" native="true"/>
+        </item>
+       </layout>
+      </widget>
       <widget class="QWidget" name="tabSettings">
        <attribute name="title">
         <string>Settings</string>
@@ -64,11 +74,7 @@
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="QLineEdit" name="pythonVersionEdit">
-            <property name="text">
-             <string>3.11</string>
-            </property>
-           </widget>
+           <widget class="QLineEdit" name="pythonVersionEdit"/>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="labelPipVersion">
@@ -78,11 +84,7 @@
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QLineEdit" name="pipVersionEdit">
-            <property name="text">
-             <string>24.0</string>
-            </property>
-           </widget>
+           <widget class="QLineEdit" name="pipVersionEdit"/>
           </item>
           <item row="2" column="0">
            <widget class="QLabel" name="labelPipToolsVersion">
@@ -92,11 +94,7 @@
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QLineEdit" name="pipToolsVersionEdit">
-            <property name="text">
-             <string>7.4.1</string>
-            </property>
-           </widget>
+           <widget class="QLineEdit" name="pipToolsVersionEdit"/>
           </item>
          </layout>
         </item>
@@ -159,6 +157,7 @@
      <string>&amp;Help</string>
     </property>
     <addaction name="actionAbout"/>
+    <addaction name="actionViewReadme"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuTools"/>
@@ -185,6 +184,7 @@
    <addaction name="actionStop"/>
    <addaction name="actionRunBatch"/>
    <addaction name="actionAbout"/>
+   <addaction name="actionViewReadme"/>
   </widget>
   <action name="actionOpenRequirements">
    <property name="icon">
@@ -272,7 +272,24 @@
     <string>About</string>
    </property>
   </action>
+  <action name="actionViewReadme">
+   <property name="icon">
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/readme.svg</normaloff>:/icons/icons/readme.svg</iconset>
+   </property>
+   <property name="text">
+    <string>View README</string>
+   </property>
+  </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>MatrixHistory</class>
+   <extends>QWidget</extends>
+   <header>MatrixHistory.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="../PipMatrixResolverQt.qrc"/>
  </resources>

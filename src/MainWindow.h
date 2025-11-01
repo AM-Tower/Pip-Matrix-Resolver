@@ -1,138 +1,87 @@
 /******************************************************************
  * File: MainWindow.h
- * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Author: Jeffrey Scott Flesher
  * Description:
- *   Declares the MainWindow class for PipMatrixResolverQt.
- *   Provides menus, toolbar, requirements.txt loading (local & web),
- *   and integration with ResolverEngine, VenvManager, BatchRunner,
- *   MatrixHistory, and MatrixUtility.
+ *   Main application window for PipMatrixResolverQt.
+ *   Provides menus, log view, progress bar, and integration with
+ *   ResolverEngine, VenvManager, BatchRunner, MatrixHistory, and
+ *   MatrixUtility.
  *
- * Version: 0.3
- * Date:    2025-10-31
+ * Version: 0.5
+ * Date:    2025-11-01
  ******************************************************************/
 
 #pragma once
 
-#include "MatrixHistory.h"
 #include <QMainWindow>
-#include <QPointer>
 #include <QStringList>
-#include <QStackedWidget>
 
 class QPlainTextEdit;
-class QTableView;
 class QProgressBar;
+class QTableView;
 class QStandardItemModel;
-class QMenu;
-class QAction;
+class MatrixHistory;
 class ResolverEngine;
 class VenvManager;
 class BatchRunner;
 
-/******************************************************************
- * @brief The MainWindow class
- * Provides the main application window, menus, toolbar,
- * requirements.txt loading, and integration with engines.
- ******************************************************************/
+QT_BEGIN_NAMESPACE
+namespace Ui { class MainWindow; }
+QT_END_NAMESPACE
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 private slots:
-    /**************************************************************
-     * File menu actions
-     **************************************************************/
     void openLocalRequirements();
     void fetchRequirementsFromUrl();
     void openMatrixHistory();
-    void exitApp();
-
-    /**************************************************************
-     * Tools menu actions
-     **************************************************************/
     void createOrUpdateVenv();
     void startResolve();
     void pauseResolve();
     void resumeResolve();
     void stopResolve();
-
-    /**************************************************************
-     * Batch menu actions
-     **************************************************************/
     void runBatch();
+    void showAboutBox();
+    void showReadmeDialog();
+    void exitApp();
 
-    /**************************************************************
-     * Logging and progress
-     **************************************************************/
+    // internal helpers
     void appendLog(const QString &line);
     void updateProgress(int percent);
     void showCompiledResult(const QString &path);
 
 private:
-    /**************************************************************
-     * Setup helpers
-     **************************************************************/
-    void setupUi();
-    void setupMenus();
-    void setupToolbar();
     void bindSignals();
-
-    /**************************************************************
-     * Utility helpers
-     **************************************************************/
     void applyToolsEnabled(bool enabled);
+    void refreshRecentMenus();
 
-    /**************************************************************
-     * UI elements
-     **************************************************************/
+    Ui::MainWindow *ui;
+
+    // Core components
+    ResolverEngine *resolver;
+    VenvManager *venv;
+    BatchRunner *batch;
+
+    // Models and views
+    QStandardItemModel *requirementsModel;
     QTableView *requirementsView;
     QTableView *matrixView;
     QPlainTextEdit *logView;
     QProgressBar *progress;
-    QStandardItemModel *requirementsModel;
+    MatrixHistory *historyWidget;
 
-    /**************************************************************
-     * Engine components
-     **************************************************************/
-    QPointer<ResolverEngine> resolver;
-    QPointer<VenvManager> venv;
-    QPointer<BatchRunner> batch;
-
-    /**************************************************************
-     * Menus and actions
-     **************************************************************/
-    QMenu *toolsMenu;
-    QAction *actionCreateVenv;
-    QAction *actionResolveMatrix;
-    QAction *actionPause;
-    QAction *actionResume;
-    QAction *actionStop;
-    QMenu *recentWebMenu;
-    QMenu *recentLocalMenu;
-
-    /**************************************************************
-     * State
-     **************************************************************/
-    bool hasValidRequirements;
-
-    /**************************************************************
-     * Lists mirror MatrixHistory state
-     **************************************************************/
+    // Recent history
     QStringList historyRecentLocal;
     QStringList historyRecentWeb;
+    QMenu *recentLocalMenu {nullptr};
+    QMenu *recentWebMenu {nullptr};
 
-    /**************************************************************
-     * Stacked Widget
-     **************************************************************/
-    QStackedWidget *stacked;
-    QWidget *mainPage;
-    MatrixHistory *historyPage;
-
-    // Helper to rebuild menus
-    void refreshRecentMenus();
-
+    // State
+    bool hasValidRequirements;
 };
-
-/************** End of File.h **************/

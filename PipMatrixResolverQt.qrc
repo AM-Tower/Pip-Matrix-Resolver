@@ -11,6 +11,7 @@
         <file>icons/stop.svg</file>
         <file>icons/batch.svg</file>
         <file>icons/info.svg</file>
+        <file>icons/readme.svg</file>
     </qresource>
 
     <!-- Translations -->
@@ -22,4 +23,9 @@
         <file>translations/MatrixHistory_en.qm</file>
         <file>translations/MatrixHistory_es.qm</file>
     </qresource>
+    <!-- Docs -->
+    <qresource prefix="/docs">
+        <file>README.md</file>
+    </qresource>
+
 </RCC>

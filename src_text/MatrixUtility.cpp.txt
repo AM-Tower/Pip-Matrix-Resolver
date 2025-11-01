@@ -102,13 +102,16 @@ void MatrixUtility::writeTableToModel(QStandardItemModel* model,
 /******************************************************************
  * ensureViewScrollable
  ******************************************************************/
-void MatrixUtility::ensureViewScrollable(QTableView* view)
+void MatrixUtility::ensureViewScrollable(QTableView *view)
 {
-    if (!view) return;
-    view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    if (auto* sb = view->verticalScrollBar()) {
-        sb->setVisible(true);
+    Q_ASSERT(view);
+    if (!view || view->parent() == nullptr) {
+        qWarning() << "ensureViewScrollable called with invalid view";
+        return;
     }
+    view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    view->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    view->resizeColumnsToContents();
 }
 
 /******************************************************************

@@ -1,14 +1,15 @@
-/******************************************************************
+/****************************************************************
  * File: MatrixHistory.h
  * Author: Jeffrey Scott Flesher, Microsoft Copilot
  * Description:
- *   Provides a tabbed UI for managing requirements history.
- *   Tabs: Local, Web, Requirements, Settings.
- *   Emits signals to import a snapshot or exit back to MainWindow.
+ *   Provides a tabbed UI for managing requirements history inside
+ *   the MainWindow. Tabs: Local and Web addresses (separate tabs),
+ *   Requirements preview, and Settings. Emits signals to import
+ *   a snapshot (local or web) or exit back to Main tab.
  *
- * Version: 0.2
- * Date:    2025-10-31
- ******************************************************************/
+ * Version: 0.3
+ * Date:    2025-11-01
+ ****************************************************************/
 
 #pragma once
 
@@ -20,65 +21,92 @@ class QTableView;
 class QPlainTextEdit;
 class QSpinBox;
 class QPushButton;
+class QStandardItemModel;
 
-/**************************************************************
+/****************************************************************
  * @brief The MatrixHistory class
- * Provides tabbed history for local and web requirements.
- **************************************************************/
+ * Manages requirements history via tabs:
+ * - Local tab: table of local files
+ * - Web tab: table of web URLs
+ * - Requirements tab: preview of selected requirements
+ * - Settings tab: history size and controls
+ *
+ * Signals:
+ * - localHistoryImported(path)
+ * - webHistoryImported(url)
+ * - historyCleared()
+ * - exitRequested()
+ ****************************************************************/
 class MatrixHistory : public QWidget
 {
     Q_OBJECT
+
 public:
-    explicit MatrixHistory(QWidget *parent = nullptr);
+    explicit MatrixHistory( QWidget *parent = nullptr );
 
 signals:
-    /// Emitted when the user clears all history
+    /************************************************************
+     * Events emitted to MainWindow
+     ************************************************************/
     void historyCleared();
-
-    /// Emitted when the user chooses a local snapshot to import.
-    void localHistoryImported(const QString &path);
-
-    /// Emitted when the user chooses a web snapshot to import.
-    void webHistoryImported(const QString &url);
-
-    /// Emitted when the user clicks Back to return to MainWindow.
+    void localHistoryImported( const QString &path );
+    void webHistoryImported( const QString &url );
     void exitRequested();
 
 private slots:
+    /************************************************************
+     * User actions mapped to signals
+     ************************************************************/
     void importLocalSelected();
     void importWebSelected();
     void backToMain();
-    void maxItemsChanged(int value);
+    void maxItemsChanged( int value );
 
 private:
-    void clearHistory();   // private helper, not a slot
+    /************************************************************
+     * Internal helpers
+     ************************************************************/
     void setupUi();
     void loadSettings();
     void saveSettings() const;
     void refreshLocalTab();
     void refreshWebTab();
-    void refreshRequirementsTab(const QString &path);
+    void refreshRequirementsTab( const QString &path );
+    void clearHistory();
 
+private:
+    /************************************************************
+     * Widgets
+     ************************************************************/
     QTabWidget *tabs;
 
     // Local tab
-    QTableView *localView;
-    QPushButton *importLocalButton;
+    QWidget         *localTab;
+    QTableView      *localView;
+    QPushButton     *importLocalButton;
+    QStandardItemModel *localModel;
 
     // Web tab
-    QTableView *webView;
-    QPushButton *importWebButton;
+    QWidget         *webTab;
+    QTableView      *webView;
+    QPushButton     *importWebButton;
+    QStandardItemModel *webModel;
 
-    // Requirements preview
-    QPlainTextEdit *requirementsPreview;
+    // Requirements preview tab
+    QWidget         *reqTab;
+    QPlainTextEdit  *requirementsPreview;
 
-    // Settings
-    QSpinBox *maxItemsSpin;
-    QPushButton *backButton;
+    // Settings tab
+    QWidget         *settingsTab;
+    QSpinBox        *maxItemsSpin;
+    QPushButton     *clearButton;
+    QPushButton     *backButton;
 
+    /************************************************************
+     * Data
+     ************************************************************/
     QStringList m_recentLocal;
     QStringList m_recentWeb;
-    int m_maxItems;
+    int         m_maxItems;
 };
-
-/************** End of File.h **************/
+/************** End of MatrixHistory.h *************************/
