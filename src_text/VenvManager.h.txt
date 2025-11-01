@@ -1,21 +1,23 @@
 #pragma once
 #include <QObject>
-#include <QProcess>
+#include <QString>
 
 class VenvManager : public QObject
 {
     Q_OBJECT
 public:
     explicit VenvManager(QObject *parent = nullptr);
+
+    // Existing API
     bool createVenv(const QString &dir, const QString &pythonVer);
     bool upgradePip(const QString &pipVer, const QString &pipToolsVer);
-    QString venvPython() const { return m_python; }
+
+    // New convenience wrapper
+    bool createOrUpdate(const QString &dir = "venv",
+                        const QString &pythonVer = "3.11",
+                        const QString &pipVer = "24.0",
+                        const QString &pipToolsVer = "7.4.1");
 
 signals:
     void logMessage(const QString &line);
-
-private:
-    QString m_venvDir;
-    QString m_python;
-    bool runCmd(const QStringList &cmd, const QProcessEnvironment &penv = QProcessEnvironment());
 };

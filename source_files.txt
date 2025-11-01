@@ -1,7 +1,7 @@
 
 ============================================== 
 PROJECT SNAPSHOT FOR AI CONTEXT 
-Generated on: 31-Oct-25 13:35:38.12 
+Generated on: 31-Oct-25 22:46:12.55 
 This file contains: 
  - Complete source code from src/ 
  - Key project files (README.md, CMakeLists.txt, .qrc) 
@@ -17,19 +17,24 @@ PipMatrixResolverQt
 A cross platform Qt 6.10 C++ GUI for resolving Python requirements.txt matrices, managing virtual environments, and running batch multimedia conversions.
 
 Features
-- Resolve Python dependency matrices with pip-tools
-- Manage virtual environments (create, upgrade pip and pip-tools)
-- Batch convert audio + image to MP4 with ffmpeg
-- Qt GUI with menus, log view, progress bar
-- Translation support (English and Spanish)
+
+* Resolve Python dependency matrices with pip-tools
+* Manage virtual environments (create, upgrade pip and pip-tools)
+* Batch convert audio + image to MP4 with ffmpeg
+* Qt GUI with menus, log view, progress bar
+* Translation support (English and Spanish)
 
 Build Instructions
-cmake -S . -B build -DCMAKE_PREFIX_PATH="C:/Qt/6.10.0/mingw_64"
+```
+cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
 cmake --build build
+```
 
 On Windows, windeployqt is run automatically after build.
 
 Project Tree
+
+```
 PipMatrixResolver/
 ├── CMakeLists.txt
 ├── PipMatrixResolverQt.qrc
@@ -58,44 +63,58 @@ PipMatrixResolver/
 │   ├── BatchRunner.cpp
 │   └── BatchRunner.h
 ├── translations/
-│   ├── PipMatrixResolverQt_en.ts
-│   └── PipMatrixResolverQt_es.ts
+│   ├── PipMatrixResolverQt\_en.ts
+│   └── PipMatrixResolverQt\_es.ts
 └── build/
+
+```
 
 File Descriptions
 
 Root
+```
 CMakeLists.txt – Build script: compiles sources, generates qm from ts, bundles resources
 PipMatrixResolverQt.qrc – Qt resource file embedding icons and compiled translations
+```
 
 resources/icons
+```
 SVG icons used in menus and toolbars
+```
 
 src
+```
 main.cpp – Application entry point. Sets up QApplication, loads translations, shows MainWindow
 MainWindow.h/.cpp/.ui – Main GUI window. Defines menus, log view, progress bar, and user actions
 ResolverEngine.h/.cpp – Core engine for iterating over package version combinations. Emits logs, progress, and success signals
 PipToolsRunner.h/.cpp – Wrapper around pip-compile. Runs with retries, logs output, analyzes errors
 VenvManager.h/.cpp – Creates and manages Python virtual environments. Upgrades pip and pip-tools
 BatchRunner.h/.cpp – Automates ffmpeg jobs. Enqueues tasks, parses progress, emits job completion signals
+```
 
 translations
-PipMatrixResolverQt_en.ts – English translation source
-PipMatrixResolverQt_es.ts – Spanish translation source
+```
+PipMatrixResolverQt\_en.ts – English translation source
+PipMatrixResolverQt\_es.ts – Spanish translation source
 Both are compiled into qm at build time and embedded
+```
 
 build
+```
 Out of source build directory. Keeps generated files separate from source tree
+```
 
 Usage
+
+```
 File → Open requirements file – Load a local requirements.txt
 Tools → Create/Update venv – Create or update a Python virtual environment
 Tools → Resolve matrix – Start iterative resolution of package versions
 Batch → Run batch conversion to mp4 – Combine audio and image into MP4
 Help → About – Show app info
+```
 
-License
-MIT or your chosen license
+License: Unlicensed, MIT or your chosen license
  
 ============================================== 
 FILE: CMakeLists.txt 
@@ -117,15 +136,17 @@ qt_standard_project_setup()
 set(TS_FILES
     translations/PipMatrixResolverQt_en.ts
     translations/PipMatrixResolverQt_es.ts
+    translations/MatrixUtility_en.ts
+    translations/MatrixUtility_es.ts
+    translations/MatrixHistory_en.ts
+    translations/MatrixHistory_es.ts
 )
 
-# Generate .qm files in the build tree
 qt_add_translation(QM_FILES ${TS_FILES})
 
 # --------------------------------------------------
-# Resources
+# Resources (icons + translations)
 # --------------------------------------------------
-# Compile the .qrc file (which references icons + .qm files)
 qt_add_resources(APP_RESOURCES PipMatrixResolverQt.qrc)
 
 # --------------------------------------------------
@@ -144,8 +165,11 @@ qt_add_executable(PipMatrixResolverQt
     src/PipToolsRunner.h
     src/BatchRunner.cpp
     src/BatchRunner.h
-    ${APP_RESOURCES}   # compiled qrc
-    ${QM_FILES}        # ensures .qm files are built before linking
+    src/MatrixUtility.h src/MatrixUtility.cpp
+    src/MatrixHistory.h src/MatrixHistory.cpp src/MatrixHistory.ui
+
+    ${APP_RESOURCES}
+    ${QM_FILES}   # ensures .qm files are built before linking
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
@@ -160,26 +184,13 @@ target_link_libraries(PipMatrixResolverQt PRIVATE
 # --------------------------------------------------
 # Deployment logic
 # --------------------------------------------------
-if(APPLE)
-    set_target_properties(PipMatrixResolverQt PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.${PROJECT_NAME}"
-        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    )
-endif()
-
 if(WIN32)
-    find_program(WINDEPLOYQT_EXECUTABLE
-        NAMES windeployqt
-        HINTS "${Qt6_DIR}/../../../bin" ENV PATH
-    )
+    find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${Qt6_DIR}/../../../bin" ENV PATH)
     if(WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET PipMatrixResolverQt POST_BUILD
             COMMAND ${WINDEPLOYQT_EXECUTABLE} --verbose 0 --no-compiler-runtime "$<TARGET_FILE:PipMatrixResolverQt>"
             COMMENT "Deploying Qt runtime for PipMatrixResolverQt (Windows)"
         )
-    else()
-        message(WARNING "⚠️ windeployqt not found — skipping Qt deployment step.")
     endif()
 elseif(APPLE)
     find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt HINTS "${Qt6_DIR}/../../../bin" ENV PATH)
@@ -199,24 +210,30 @@ install(TARGETS PipMatrixResolverQt)
 FILE: PipMatrixResolverQt.qrc 
 ============================================== 
 <RCC>
-    <qresource prefix="/">
-        <!-- Translations -->
+    <!-- Icons -->
+    <qresource prefix="/icons">
+        <file>icons/app.svg</file>
+        <file>icons/open.svg</file>
+        <file>icons/url.svg</file>
+        <file>icons/venv.svg</file>
+        <file>icons/resolve.svg</file>
+        <file>icons/pause.svg</file>
+        <file>icons/resume.svg</file>
+        <file>icons/stop.svg</file>
+        <file>icons/batch.svg</file>
+        <file>icons/info.svg</file>
+    </qresource>
+
+    <!-- Translations -->
+    <qresource prefix="/translations">
         <file>translations/PipMatrixResolverQt_en.qm</file>
         <file>translations/PipMatrixResolverQt_es.qm</file>
-        <!-- Icons -->
-        <file>resources/icons/app.svg</file>
-        <file>resources/icons/open.svg</file>
-        <file>resources/icons/url.svg</file>
-        <file>resources/icons/venv.svg</file>
-        <file>resources/icons/resolve.svg</file>
-        <file>resources/icons/pause.svg</file>
-        <file>resources/icons/resume.svg</file>
-        <file>resources/icons/stop.svg</file>
-        <file>resources/icons/batch.svg</file>
-        <file>resources/icons/info.svg</file>
+        <file>translations/MatrixUtility_en.qm</file>
+        <file>translations/MatrixUtility_es.qm</file>
+        <file>translations/MatrixHistory_en.qm</file>
+        <file>translations/MatrixHistory_es.qm</file>
     </qresource>
-</RCC>
- 
+</RCC> 
 ============================================== 
 FILE: BatchRunner.cpp 
 ============================================== 
@@ -387,50 +404,43 @@ FILE: main.cpp
 #include <QLocale>
 #include <QFile>
 #include <QDebug>
+#include <QIcon>
 #include "MainWindow.h"
-
-// Include the generated header for your resource file
-// #include <QtGlobal> void initResources() { Q_INIT_RESOURCE(PipMatrixResolverQt); }
 
 int main(int argc, char *argv[])
 {
     QApplication theApplication(argc, argv);
+
+    // Register compiled resources
+    Q_INIT_RESOURCE(PipMatrixResolverQt);
+
     // Enable icons in menus globally
     theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
 
-    QApplication::setWindowIcon(QIcon(":/resources/icons/app.svg"));
+    // Set application icon
+    QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
 
-    // --- Resource diagnostics (optional) ---
-    auto checkIcon = [](const char* rpath)
-    {
-        qDebug() << "[RESOURCE CHECK]" << rpath
-                 << "exists:" << QFile::exists(rpath)
-                 << "icon.isNull:" << QIcon(rpath).isNull();
-    };
-    checkIcon(":/resources/icons/open.svg");
+    // Diagnostics
+    qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
 
-    // --- Translation load from resource ---
-    QTranslator translator;
+    // Translation loading
     const QString languageCode = QLocale::system().name().split('_').first();
-    const QString qmFileName = QString("PipMatrixResolverQt_%1.qm").arg(languageCode);
-    const QString resDir = QString(":/translations");
-    const QString resPath = QString("%1/%2").arg(resDir, qmFileName);
-    if (QFile::exists(resPath))
-    {
-        if (translator.load(qmFileName, resDir))
-        {
-            theApplication.installTranslator(&translator);
+    auto loadTranslator = [&](const QString &baseName) -> bool {
+        QTranslator *tr = new QTranslator(&theApplication);
+        const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
+        if (tr->load(qmFile)) {
+            theApplication.installTranslator(tr);
+            qDebug() << "Loaded translation:" << qmFile;
+            return true;
         }
-        else
-        {
-            qWarning() << "TRANSLATION ERROR: Resource exists but load failed for"
-                       << languageCode << "at" << resPath;
-        }
-    }
-    else
-    {
-        qWarning() << "TRANSLATION ERROR: Resource not found at" << resPath;
-    }
+        delete tr;
+        return false;
+    };
+
+    loadTranslator("PipMatrixResolverQt");
+    loadTranslator("MatrixUtility");
+    loadTranslator("MatrixHistory");
+
     MainWindow w;
     w.show();
     return theApplication.exec();
@@ -439,10 +449,25 @@ int main(int argc, char *argv[])
 ============================================== 
 FILE: MainWindow.cpp 
 ============================================== 
+/******************************************************************
+ * File: MainWindow.cpp
+ * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Description:
+ *   Implements the main application window for PipMatrixResolverQt.
+ *   Provides menus, toolbar, requirements.txt loading (local & web),
+ *   and integration with ResolverEngine, VenvManager, BatchRunner,
+ *   MatrixHistory, and MatrixUtility.
+ *
+ * Version: 0.4
+ * Date:    2025-10-31
+ ******************************************************************/
+
 #include "MainWindow.h"
 #include "ResolverEngine.h"
 #include "VenvManager.h"
 #include "BatchRunner.h"
+#include "MatrixHistory.h"
+#include "MatrixUtility.h"
 
 #include <QFileDialog>
 #include <QInputDialog>
@@ -457,27 +482,51 @@ FILE: MainWindow.cpp
 #include <QTableView>
 #include <QDir>
 #include <QDateTime>
+#include <QStandardItemModel>
+#include <QHeaderView>
 
-static QString logsDir()
-{
-    QDir dir("logs");
-    if (!dir.exists()) dir.mkpath(".");
-    return dir.absolutePath();
-}
-
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), resolver(new ResolverEngine(this)), venv(new VenvManager(this)), batch(new BatchRunner(this))
+/******************************************************************
+ * Constructor
+ ******************************************************************/
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent),
+    resolver(new ResolverEngine(this)),
+    venv(new VenvManager(this)),
+    batch(new BatchRunner(this)),
+    requirementsModel(new QStandardItemModel(this)),
+    toolsMenu(nullptr),
+    actionCreateVenv(nullptr),
+    actionResolveMatrix(nullptr),
+    actionPause(nullptr),
+    actionResume(nullptr),
+    actionStop(nullptr),
+    recentWebMenu(nullptr),
+    recentLocalMenu(nullptr),
+    hasValidRequirements(false)
 {
     setupUi();
     setupMenus();
     setupToolbar();
     bindSignals();
+    applyToolsEnabled(false);
     statusBar()->showMessage(tr("Ready"));
 }
 
+/******************************************************************
+ * setupUi
+ ******************************************************************/
 void MainWindow::setupUi()
 {
     auto splitter = new QSplitter(this);
+
     requirementsView = new QTableView(splitter);
+    requirementsView->setModel(requirementsModel);
+    requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
+    requirementsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    requirementsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    requirementsView->horizontalHeader()->setStretchLastSection(true);
+    requirementsView->verticalHeader()->setVisible(false);
+
     matrixView = new QTableView(splitter);
 
     auto bottomSplitter = new QSplitter(Qt::Horizontal, this);
@@ -493,178 +542,451 @@ void MainWindow::setupUi()
     setCentralWidget(central);
 }
 
+/******************************************************************
+ * setupMenus
+ ******************************************************************/
 void MainWindow::setupMenus()
 {
     auto fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addAction(QIcon(":/resources/icons/open.svg"), tr("Open requirements file..."), this, &MainWindow::openLocalRequirements);
-    fileMenu->addAction(QIcon(":/resources/icons/url.svg"), tr("Fetch requirements from URL..."), this, &MainWindow::fetchRequirementsFromUrl);
+    fileMenu->addAction(QIcon(":/icons/icons/open.svg"),
+                        tr("Open requirements file..."),
+                        this, &MainWindow::openLocalRequirements);
+    fileMenu->addAction(QIcon(":/icons/icons/url.svg"),
+                        tr("Fetch requirements from URL..."),
+                        this, &MainWindow::fetchRequirementsFromUrl);
+
+    recentLocalMenu = fileMenu->addMenu(tr("Recent local files"));
+    recentWebMenu   = fileMenu->addMenu(tr("Recent web URLs"));
+
+    fileMenu->addSeparator();
+    fileMenu->addAction(tr("History..."), this, &MainWindow::openMatrixHistory);
     fileMenu->addSeparator();
     fileMenu->addAction(tr("Exit"), this, &MainWindow::exitApp);
 
-    auto toolsMenu = menuBar()->addMenu(tr("&Tools"));
-    toolsMenu->addAction(QIcon(":/resources/icons/venv.svg"), tr("Create/Update venv"), this, &MainWindow::createOrUpdateVenv);
-    toolsMenu->addAction(QIcon(":/resources/icons/resolve.svg"), tr("Resolve matrix"), this, &MainWindow::startResolve);
-    toolsMenu->addAction(QIcon(":/resources/icons/pause.svg"), tr("Pause"), this, &MainWindow::pauseResolve);
-    toolsMenu->addAction(QIcon(":/resources/icons/resume.svg"), tr("Resume"), this, &MainWindow::resumeResolve);
-    toolsMenu->addAction(QIcon(":/resources/icons/stop.svg"), tr("Stop"), this, &MainWindow::stopResolve);
+    toolsMenu = menuBar()->addMenu(tr("&Tools"));
+    actionCreateVenv    = toolsMenu->addAction(QIcon(":/icons/icons/venv.svg"),
+                                            tr("Create/Update venv"),
+                                            this, &MainWindow::createOrUpdateVenv);
+    actionResolveMatrix = toolsMenu->addAction(QIcon(":/icons/icons/resolve.svg"),
+                                               tr("Resolve matrix"),
+                                               this, &MainWindow::startResolve);
+    actionPause         = toolsMenu->addAction(QIcon(":/icons/icons/pause.svg"),
+                                       tr("Pause"),
+                                       this, &MainWindow::pauseResolve);
+    actionResume        = toolsMenu->addAction(QIcon(":/icons/icons/resume.svg"),
+                                        tr("Resume"),
+                                        this, &MainWindow::resumeResolve);
+    actionStop          = toolsMenu->addAction(QIcon(":/icons/icons/stop.svg"),
+                                      tr("Stop"),
+                                      this, &MainWindow::stopResolve);
 
     auto batchMenu = menuBar()->addMenu(tr("&Batch"));
-    batchMenu->addAction(QIcon(":/resources/icons/batch.svg"), tr("Run batch conversion to mp4"), this, &MainWindow::runBatch);
+    batchMenu->addAction(QIcon(":/icons/icons/batch.svg"),
+                         tr("Run batch conversion to mp4"),
+                         this, &MainWindow::runBatch);
 
     auto helpMenu = menuBar()->addMenu(tr("&Help"));
-    helpMenu->addAction(QIcon(":/resources/icons/info.svg"), tr("About"), this, [this]() {
-        QMessageBox::about(this, tr("About Pip Matrix Resolver"),
-                           tr("<b>Pip Matrix Resolver</b><br>Cross-platform Qt tool to resolve Python dependency matrices."));
-    });
+    helpMenu->addAction(QIcon(":/icons/icons/info.svg"),
+                        tr("About"),
+                        this, [this]()
+                        {
+                            QMessageBox::about(this,
+                                               tr("About Pip Matrix Resolver"),
+                                               tr("<b>Pip Matrix Resolver</b><br>"
+                                                  "Cross-platform Qt tool to resolve "
+                                                  "Python dependency matrices."));
+                        });
 }
 
+/******************************************************************
+ * setupToolbar
+ ******************************************************************/
 void MainWindow::setupToolbar()
 {
     auto toolbar = addToolBar(tr("Main Toolbar"));
-    toolbar->addAction(QIcon(":/resources/icons/open.svg"), tr("Open requirements file..."), this, &MainWindow::openLocalRequirements);
-    toolbar->addAction(QIcon(":/resources/icons/url.svg"), tr("Fetch requirements from URL..."), this, &MainWindow::fetchRequirementsFromUrl);
+    toolbar->addAction(QIcon(":/icons/icons/open.svg"),
+                       tr("Open requirements file..."),
+                       this, &MainWindow::openLocalRequirements);
+    toolbar->addAction(QIcon(":/icons/icons/url.svg"),
+                       tr("Fetch requirements from URL..."),
+                       this, &MainWindow::fetchRequirementsFromUrl);
     toolbar->addSeparator();
-    toolbar->addAction(QIcon(":/resources/icons/venv.svg"), tr("Create/Update venv"), this, &MainWindow::createOrUpdateVenv);
-    toolbar->addAction(QIcon(":/resources/icons/resolve.svg"), tr("Resolve matrix"), this, &MainWindow::startResolve);
-    toolbar->addAction(QIcon(":/resources/icons/pause.svg"), tr("Pause"), this, &MainWindow::pauseResolve);
-    toolbar->addAction(QIcon(":/resources/icons/resume.svg"), tr("Resume"), this, &MainWindow::resumeResolve);
-    toolbar->addAction(QIcon(":/resources/icons/stop.svg"), tr("Stop"), this, &MainWindow::stopResolve);
-    toolbar->addAction(QIcon(":/resources/icons/batch.svg"), tr("Run batch conversion to mp4"), this, &MainWindow::runBatch);
+    toolbar->addAction(QIcon(":/icons/icons/venv.svg"),
+                       tr("Create/Update venv"),
+                       this, &MainWindow::createOrUpdateVenv);
+    toolbar->addAction(QIcon(":/icons/icons/resolve.svg"),
+                       tr("Resolve matrix"),
+                       this, &MainWindow::startResolve);
+    toolbar->addAction(QIcon(":/icons/icons/pause.svg"),
+                       tr("Pause"),
+                       this, &MainWindow::pauseResolve);
+    toolbar->addAction(QIcon(":/icons/icons/resume.svg"),
+                       tr("Resume"),
+                       this, &MainWindow::resumeResolve);
+    toolbar->addAction(QIcon(":/icons/icons/stop.svg"),
+                       tr("Stop"),
+                       this, &MainWindow::stopResolve);
+    toolbar->addAction(QIcon(":/icons/icons/batch.svg"),
+                       tr("Run batch conversion to mp4"),
+                       this, &MainWindow::runBatch);
 }
 
+/******************************************************************
+ * bindSignals
+ ******************************************************************/
 void MainWindow::bindSignals()
 {
-    // Connect ResolverEngine signals
-    connect(resolver, &ResolverEngine::logMessage, this, &MainWindow::appendLog);
-    connect(resolver, &ResolverEngine::progressChanged, this, &MainWindow::updateProgress);
-    connect(resolver, &ResolverEngine::successCompiled, this, &MainWindow::showCompiledResult);
+    connect(resolver, &ResolverEngine::logMessage,
+            this, &MainWindow::appendLog);
+    connect(resolver, &ResolverEngine::progressChanged,
+            this, &MainWindow::updateProgress);
+    connect(resolver, &ResolverEngine::successCompiled,
+            this, &MainWindow::showCompiledResult);
 
-    // Connect VenvManager signals
-    connect(venv, &VenvManager::logMessage, this, &MainWindow::appendLog);
+    connect(venv, &VenvManager::logMessage,
+            this, &MainWindow::appendLog);
 
-    // Connect BatchRunner signals
-    connect(batch, &BatchRunner::logMessage, this, &MainWindow::appendLog);
-    connect(batch, &BatchRunner::progressChanged, this, &MainWindow::updateProgress);
-    connect(batch, &BatchRunner::allJobsFinished, this, [this]() {
-        statusBar()->showMessage(tr("Batch jobs complete"));
-    });
-
+    connect(batch, &BatchRunner::logMessage,
+            this, &MainWindow::appendLog);
+    connect(batch, &BatchRunner::progressChanged,
+            this, &MainWindow::updateProgress);
+    connect(batch, &BatchRunner::allJobsFinished,
+            this, [this]() {
+                statusBar()->showMessage(tr("Batch jobs complete"));
+            });
 }
 
+/******************************************************************
+ * applyToolsEnabled
+ ******************************************************************/
+void MainWindow::applyToolsEnabled(bool enabled)
+{
+    hasValidRequirements = enabled;
+    if (actionCreateVenv)    actionCreateVenv->setEnabled(enabled);
+    if (actionResolveMatrix) actionResolveMatrix->setEnabled(enabled);
+    if (actionPause)         actionPause->setEnabled(enabled);
+    if (actionResume)        actionResume->setEnabled(enabled);
+    if (actionStop)          actionStop->setEnabled(enabled);
+}
+
+/******************************************************************
+ * openMatrixHistory
+ ******************************************************************/
+void MainWindow::openMatrixHistory()
+{
+    QWidget *oldCentral = centralWidget();
+    auto *history = new MatrixHistory(this);
+
+    // Local history import
+    connect(history, &MatrixHistory::localHistoryImported,
+            this, [this, oldCentral, history](const QString &path)
+            {
+                QStringList lines = MatrixUtility::readTextFileLines(path);
+                MatrixUtility::writeTableToModel(requirementsModel, lines);
+                MatrixUtility::ensureViewScrollable(requirementsView);
+                applyToolsEnabled(true);
+                appendLog(tr("Imported requirements from local history: %1")
+                              .arg(path));
+                setCentralWidget(oldCentral);
+                history->deleteLater();
+            });
+
+    // Web history import
+    connect(history, &MatrixHistory::webHistoryImported,
+            this, [this, oldCentral, history](const QString &url)
+            {
+                QByteArray content;
+                if (!MatrixUtility::downloadText(url, content))
+                {
+                    QMessageBox::warning(this, tr("Download failed"),
+                                         tr("Failed to fetch requirements "
+                                            "from URL:\n%1").arg(url));
+                    return;
+                }
+
+                const QStringList lines =
+                    QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
+                MatrixUtility::writeTableToModel(requirementsModel, lines);
+                MatrixUtility::ensureViewScrollable(requirementsView);
+                applyToolsEnabled(true);
+                appendLog(tr("Imported requirements from web history: %1")
+                              .arg(url));
+                setCentralWidget(oldCentral);
+                history->deleteLater();
+            });
+
+    // Exit back to main window
+    connect(history, &MatrixHistory::exitRequested,
+            this, [this, oldCentral, history]()
+            {
+                setCentralWidget(oldCentral);
+                history->deleteLater();
+            });
+
+    // Clear history → clear menus too
+    connect(history, &MatrixHistory::historyCleared,
+            this, [this]()
+            {
+                historyRecentLocal.clear();
+                historyRecentWeb.clear();
+                refreshRecentMenus();
+            });
+
+    setCentralWidget(history);
+}
+
+/******************************************************************
+ * openLocalRequirements
+ ******************************************************************/
 void MainWindow::openLocalRequirements()
 {
-    QString path = QFileDialog::getOpenFileName(this, tr("Open requirements.txt"), QString(), tr("Text Files (*.txt)"));
+    QString path = QFileDialog::getOpenFileName(
+        this, tr("Open requirements.txt"), QString(),
+        tr("Text Files (*.txt)"));
     if (path.isEmpty())
         return;
-    appendLog(tr("Loaded requirements: %1").arg(path));
-    resolver->loadRequirementsFromFile(path);
+
+    const QStringList lines = MatrixUtility::readTextFileLines(path);
+    if (lines.isEmpty()) {
+        QMessageBox::warning(this, tr("Empty file"),
+                             tr("The selected file is empty or unreadable."));
+        return;
+    }
+
+    MatrixUtility::writeTableToModel(requirementsModel, lines);
+    MatrixUtility::ensureViewScrollable(requirementsView);
+    applyToolsEnabled(true);
+    appendLog(tr("Loaded requirements (local): %1").arg(path));
 }
 
+/******************************************************************
+ * fetchRequirementsFromUrl
+ ******************************************************************/
 void MainWindow::fetchRequirementsFromUrl()
 {
     bool ok = false;
-    QString url = QInputDialog::getText(this, tr("Fetch requirements"), tr("Enter URL:"), QLineEdit::Normal, "", &ok);
-    if (ok && !url.isEmpty())
-    {
-        appendLog(tr("Fetching requirements from: %1").arg(url));
-        resolver->loadRequirementsFromUrl(url);
+    QString inputUrl = QInputDialog::getText(
+        this, tr("Fetch requirements"), tr("Enter URL:"),
+        QLineEdit::Normal, "", &ok);
+    if (!ok || inputUrl.isEmpty())
+        return;
+
+    const QString rawUrl = MatrixUtility::normalizeRawUrl(inputUrl);
+    QByteArray content;
+    if (!MatrixUtility::downloadText(rawUrl, content)) {
+        QMessageBox::warning(this, tr("Download failed"),
+                             tr("Failed to fetch requirements from URL:\n%1").arg(rawUrl));
+        return;
     }
+
+    const QStringList lines = QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
+    MatrixUtility::writeTableToModel(requirementsModel, lines);
+    MatrixUtility::ensureViewScrollable(requirementsView);
+    applyToolsEnabled(true);
+    appendLog(tr("Fetched requirements from URL: %1").arg(rawUrl));
 }
 
+/******************************************************************
+ * createOrUpdateVenv
+ ******************************************************************/
 void MainWindow::createOrUpdateVenv()
 {
-    QString dir = QDir("venvs").filePath("compile");
-    appendLog(tr("Creating or updating virtual environment at %1").arg(dir));
-    if (venv->createVenv(dir, "3"))
-    {
-        appendLog(tr("Virtual environment created."));
-        venv->upgradePip("24.0", "7.4.0");
-    }
-    else
-    {
-        appendLog(tr("Failed to create virtual environment."));
-    }
+    appendLog(tr("Creating or updating virtual environment..."));
+    venv->createOrUpdate();
 }
 
+/******************************************************************
+ * startResolve
+ ******************************************************************/
 void MainWindow::startResolve()
 {
     appendLog(tr("Starting matrix resolution..."));
     resolver->start();
 }
 
+/******************************************************************
+ * pauseResolve
+ ******************************************************************/
 void MainWindow::pauseResolve()
 {
     appendLog(tr("Pausing..."));
     resolver->pause();
 }
 
+/******************************************************************
+ * resumeResolve
+ ******************************************************************/
 void MainWindow::resumeResolve()
 {
     appendLog(tr("Resuming..."));
     resolver->resume();
 }
 
+/******************************************************************
+ * stopResolve
+ ******************************************************************/
 void MainWindow::stopResolve()
 {
     appendLog(tr("Stopping..."));
     resolver->stop();
 }
 
+/******************************************************************
+ * runBatch
+ ******************************************************************/
 void MainWindow::runBatch()
 {
     BatchJob job;
-    job.imagePath = QFileDialog::getOpenFileName(this, tr("Select image"), QString(), tr("Images (*.png *.jpg *.jpeg)"));
+    job.imagePath = QFileDialog::getOpenFileName(
+        this, tr("Select image"), QString(),
+        tr("Images (*.png *.jpg *.jpeg)"));
     if (job.imagePath.isEmpty())
         return;
-    job.audioPath = QFileDialog::getOpenFileName(this, tr("Select audio"), QString(), tr("Audio Files (*.wav *.mp3)"));
+
+    job.audioPath = QFileDialog::getOpenFileName(
+        this, tr("Select audio"), QString(),
+        tr("Audio Files (*.wav *.mp3)"));
     if (job.audioPath.isEmpty())
         return;
 
     QString baseName = QFileInfo(job.imagePath).completeBaseName();
-    QString outFile = QDir(logsDir()).filePath(baseName + "_output.mp4");
+    QString outFile = QDir(MatrixUtility::logsDir()).filePath(baseName + "_output.mp4");
     job.outputPath = outFile;
 
     batch->enqueue(job);
     batch->start();
 }
 
+/******************************************************************
+ * appendLog
+ ******************************************************************/
 void MainWindow::appendLog(const QString &line)
 {
     QString time = QDateTime::currentDateTime().toString("HH:mm:ss");
     logView->appendPlainText(QString("[%1] %2").arg(time, line));
 }
 
+/******************************************************************
+ * updateProgress
+ ******************************************************************/
 void MainWindow::updateProgress(int percent)
 {
     progress->setValue(percent);
 }
 
+/******************************************************************
+ * showCompiledResult
+ ******************************************************************/
 void MainWindow::showCompiledResult(const QString &path)
 {
     appendLog(tr("Successfully compiled: %1").arg(path));
     statusBar()->showMessage(tr("Compiled: %1").arg(path), 5000);
 }
 
+/******************************************************************
+ * refreshRecentMenus
+ ******************************************************************/
+void MainWindow::refreshRecentMenus()
+{
+    // Clear old actions
+    recentLocalMenu->clear();
+    recentWebMenu->clear();
+
+    // Local files
+    for (const QString &path : std::as_const(historyRecentLocal))
+    {
+        QAction *act = recentLocalMenu->addAction(path);
+        connect(act, &QAction::triggered, this, [this, path]()
+                {
+                    QStringList lines = MatrixUtility::readTextFileLines(path);
+                    if (lines.isEmpty())
+                    {
+                        QMessageBox::warning(this, tr("Empty file"),
+                                             tr("The selected file is empty "
+                                                "or unreadable."));
+                        return;
+                    }
+                    MatrixUtility::writeTableToModel(requirementsModel, lines);
+                    MatrixUtility::ensureViewScrollable(requirementsView);
+                    applyToolsEnabled(true);
+                    appendLog(tr("Loaded requirements (recent local): %1")
+                                  .arg(path));
+                });
+    }
+
+    // Web URLs
+    for (const QString &url : std::as_const(historyRecentWeb))
+    {
+        QAction *act = recentWebMenu->addAction(url);
+        connect(act, &QAction::triggered, this, [this, url]()
+                {
+                    QByteArray content;
+                    if (!MatrixUtility::downloadText(url, content))
+                    {
+                        QMessageBox::warning(this, tr("Download failed"),
+                                             tr("Failed to fetch requirements "
+                                                "from URL:\n%1").arg(url));
+                        return;
+                    }
+                    const QStringList lines =
+                        QString::fromUtf8(content).split('\n',
+                                                         Qt::KeepEmptyParts);
+                    MatrixUtility::writeTableToModel(requirementsModel, lines);
+                    MatrixUtility::ensureViewScrollable(requirementsView);
+                    applyToolsEnabled(true);
+                    appendLog(tr("Fetched requirements (recent web): %1")
+                                  .arg(url));
+                });
+    }
+}
+
+/******************************************************************
+ * exitApp
+ ******************************************************************/
 void MainWindow::exitApp()
 {
     close();
 }
+
+/************** End of File.cpp **************/
  
 ============================================== 
 FILE: MainWindow.h 
 ============================================== 
+/******************************************************************
+ * File: MainWindow.h
+ * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Description:
+ *   Declares the MainWindow class for PipMatrixResolverQt.
+ *   Provides menus, toolbar, requirements.txt loading (local & web),
+ *   and integration with ResolverEngine, VenvManager, BatchRunner,
+ *   MatrixHistory, and MatrixUtility.
+ *
+ * Version: 0.3
+ * Date:    2025-10-31
+ ******************************************************************/
+
 #pragma once
 
 #include <QMainWindow>
 #include <QPointer>
+#include <QStringList>
 
 class QPlainTextEdit;
 class QTableView;
 class QProgressBar;
+class QStandardItemModel;
+class QMenu;
+class QAction;
 class ResolverEngine;
 class VenvManager;
 class BatchRunner;
 
+/******************************************************************
+ * @brief The MainWindow class
+ * Provides the main application window, menus, toolbar,
+ * requirements.txt loading, and integration with engines.
+ ******************************************************************/
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -672,41 +994,94 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 private slots:
-    // File
+    /**************************************************************
+     * File menu actions
+     **************************************************************/
     void openLocalRequirements();
     void fetchRequirementsFromUrl();
+    void openMatrixHistory();
     void exitApp();
 
-    // Tools
+    /**************************************************************
+     * Tools menu actions
+     **************************************************************/
     void createOrUpdateVenv();
     void startResolve();
     void pauseResolve();
     void resumeResolve();
     void stopResolve();
 
-    // Batch
+    /**************************************************************
+     * Batch menu actions
+     **************************************************************/
     void runBatch();
 
-    // Logging
+    /**************************************************************
+     * Logging and progress
+     **************************************************************/
     void appendLog(const QString &line);
     void updateProgress(int percent);
     void showCompiledResult(const QString &path);
 
 private:
+    /**************************************************************
+     * Setup helpers
+     **************************************************************/
     void setupUi();
     void setupMenus();
     void setupToolbar();
     void bindSignals();
 
+    /**************************************************************
+     * Utility helpers
+     **************************************************************/
+    void applyToolsEnabled(bool enabled);
+
+    /**************************************************************
+     * UI elements
+     **************************************************************/
     QTableView *requirementsView;
     QTableView *matrixView;
     QPlainTextEdit *logView;
     QProgressBar *progress;
+    QStandardItemModel *requirementsModel;
 
+    /**************************************************************
+     * Engine components
+     **************************************************************/
     QPointer<ResolverEngine> resolver;
     QPointer<VenvManager> venv;
     QPointer<BatchRunner> batch;
+
+    /**************************************************************
+     * Menus and actions
+     **************************************************************/
+    QMenu *toolsMenu;
+    QAction *actionCreateVenv;
+    QAction *actionResolveMatrix;
+    QAction *actionPause;
+    QAction *actionResume;
+    QAction *actionStop;
+    QMenu *recentWebMenu;
+    QMenu *recentLocalMenu;
+
+    /**************************************************************
+     * State
+     **************************************************************/
+    bool hasValidRequirements;
+
+    /**************************************************************
+     * Lists mirror MatrixHistory state
+     **************************************************************/
+    QStringList historyRecentLocal;
+    QStringList historyRecentWeb;
+
+    // Helper to rebuild menus
+    void refreshRecentMenus();
+
 };
+
+/************** End of File.h **************/
  
 ============================================== 
 FILE: MainWindow.ui 
@@ -729,39 +1104,132 @@ FILE: MainWindow.ui
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <widget class="QSplitter" name="splitter">
-      <property name="orientation">
-       <enum>Qt::Orientation::Horizontal</enum>
+     <widget class="QTabWidget" name="mainTabs">
+      <property name="currentIndex">
+       <number>0</number>
       </property>
-      <widget class="QTableView" name="requirementsView"/>
-      <widget class="QTableView" name="matrixView"/>
-     </widget>
-    </item>
-    <item>
-     <widget class="QSplitter" name="bottomSplitter">
-      <property name="orientation">
-       <enum>Qt::Orientation::Horizontal</enum>
-      </property>
-      <widget class="QPlainTextEdit" name="logView">
-       <property name="readOnly">
-        <bool>true</bool>
-       </property>
+      <widget class="QWidget" name="tabMain">
+       <attribute name="title">
+        <string>Main</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="mainLayout">
+        <item>
+         <widget class="QSplitter" name="splitter">
+          <property name="orientation">
+           <enum>Qt::Orientation::Horizontal</enum>
+          </property>
+          <widget class="QTableView" name="requirementsView"/>
+          <widget class="QTableView" name="matrixView"/>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSplitter" name="bottomSplitter">
+          <property name="orientation">
+           <enum>Qt::Orientation::Horizontal</enum>
+          </property>
+          <widget class="QPlainTextEdit" name="logView">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+          <widget class="QProgressBar" name="progressBar"/>
+         </widget>
+        </item>
+       </layout>
       </widget>
-      <widget class="QProgressBar" name="progressBar"/>
+      <widget class="QWidget" name="tabSettings">
+       <attribute name="title">
+        <string>Settings</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="settingsLayout">
+        <item>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="labelPythonVersion">
+            <property name="text">
+             <string>Python version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="pythonVersionEdit">
+            <property name="text">
+             <string>3.11</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="labelPipVersion">
+            <property name="text">
+             <string>pip version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="pipVersionEdit">
+            <property name="text">
+             <string>24.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="labelPipToolsVersion">
+            <property name="text">
+             <string>pip-tools version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="pipToolsVersionEdit">
+            <property name="text">
+             <string>7.4.1</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPushButton" name="saveSettingsButton">
+          <property name="text">
+           <string>Save Settings</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="restoreDefaultsButton">
+          <property name="text">
+           <string>Restore Defaults</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>900</width>
+     <height>20</height>
+    </rect>
+   </property>
    <widget class="QMenu" name="menuFile">
-    <property name="title"><string>&amp;File</string></property>
+    <property name="title">
+     <string>&amp;File</string>
+    </property>
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
    <widget class="QMenu" name="menuTools">
-    <property name="title"><string>&amp;Tools</string></property>
+    <property name="title">
+     <string>&amp;Tools</string>
+    </property>
     <addaction name="actionCreateVenv"/>
     <addaction name="actionResolveMatrix"/>
     <addaction name="actionPause"/>
@@ -769,11 +1237,15 @@ FILE: MainWindow.ui
     <addaction name="actionStop"/>
    </widget>
    <widget class="QMenu" name="menuBatch">
-    <property name="title"><string>&amp;Batch</string></property>
+    <property name="title">
+     <string>&amp;Batch</string>
+    </property>
     <addaction name="actionRunBatch"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
-    <property name="title"><string>&amp;Help</string></property>
+    <property name="title">
+     <string>&amp;Help</string>
+    </property>
     <addaction name="actionAbout"/>
    </widget>
    <addaction name="menuFile"/>
@@ -783,8 +1255,15 @@ FILE: MainWindow.ui
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="mainToolBar">
-   <property name="windowTitle"><string>Main Toolbar</string></property>
-   <attribute name="toolBarArea"><enum>TopToolBarArea</enum></attribute>
+   <property name="windowTitle">
+    <string>Main Toolbar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
    <addaction name="actionOpenRequirements"/>
    <addaction name="actionFetchRequirements"/>
    <addaction name="actionCreateVenv"/>
@@ -795,86 +1274,758 @@ FILE: MainWindow.ui
    <addaction name="actionRunBatch"/>
    <addaction name="actionAbout"/>
   </widget>
-
-  <!-- Actions with cleaned iconsets -->
   <action name="actionOpenRequirements">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/open.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/open.svg</normaloff>:/icons/icons/open.svg</iconset>
    </property>
-   <property name="text"><string>Open requirements file...</string></property>
+   <property name="text">
+    <string>Open requirements file...</string>
+   </property>
   </action>
   <action name="actionFetchRequirements">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/url.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/url.svg</normaloff>:/icons/icons/url.svg</iconset>
    </property>
-   <property name="text"><string>Fetch requirements from URL...</string></property>
+   <property name="text">
+    <string>Fetch requirements from URL...</string>
+   </property>
   </action>
   <action name="actionExit">
-   <property name="text"><string>Exit</string></property>
+   <property name="text">
+    <string>Exit</string>
+   </property>
   </action>
   <action name="actionCreateVenv">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/venv.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/venv.svg</normaloff>:/icons/icons/venv.svg</iconset>
    </property>
-   <property name="text"><string>Create/Update venv</string></property>
+   <property name="text">
+    <string>Create/Update venv</string>
+   </property>
   </action>
   <action name="actionResolveMatrix">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/resolve.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/resolve.svg</normaloff>:/icons/icons/resolve.svg</iconset>
    </property>
-   <property name="text"><string>Resolve matrix</string></property>
+   <property name="text">
+    <string>Resolve matrix</string>
+   </property>
   </action>
   <action name="actionPause">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/pause.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/pause.svg</normaloff>:/icons/icons/pause.svg</iconset>
    </property>
-   <property name="text"><string>Pause</string></property>
+   <property name="text">
+    <string>Pause</string>
+   </property>
   </action>
   <action name="actionResume">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/resume.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/resume.svg</normaloff>:/icons/icons/resume.svg</iconset>
    </property>
-   <property name="text"><string>Resume</string></property>
+   <property name="text">
+    <string>Resume</string>
+   </property>
   </action>
   <action name="actionStop">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/stop.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/stop.svg</normaloff>:/icons/icons/stop.svg</iconset>
    </property>
-   <property name="text"><string>Stop</string></property>
+   <property name="text">
+    <string>Stop</string>
+   </property>
   </action>
   <action name="actionRunBatch">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/batch.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/batch.svg</normaloff>:/icons/icons/batch.svg</iconset>
    </property>
-   <property name="text"><string>Run batch conversion to mp4</string></property>
+   <property name="text">
+    <string>Run batch conversion to mp4</string>
+   </property>
   </action>
   <action name="actionAbout">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/info.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/info.svg</normaloff>:/icons/icons/info.svg</iconset>
    </property>
-   <property name="text"><string>About</string></property>
+   <property name="text">
+    <string>About</string>
+   </property>
   </action>
  </widget>
+ <resources>
+  <include location="../PipMatrixResolverQt.qrc"/>
+ </resources>
  <connections/>
 </ui>
+ 
+============================================== 
+FILE: MatrixHistory.cpp 
+============================================== 
+/******************************************************************
+ * File: MatrixHistory.cpp
+ * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Description:
+ *   Implements MatrixHistory with tabbed UI for Local and Web
+ *   requirements history. Provides import, clear, and settings.
+ *
+ * Version: 0.2
+ * Date:    2025-10-31
+ ******************************************************************/
+
+#include "MatrixHistory.h"
+
+#include <QTabWidget>
+#include <QTableView>
+#include <QPlainTextEdit>
+#include <QVBoxLayout>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QHeaderView>
+#include <QSettings>
+#include <QStandardItemModel>
+#include <QFile>
+#include <utility>   // for std::as_const
+
+/******************************************************************
+ * Constructor
+ ******************************************************************/
+MatrixHistory::MatrixHistory(QWidget *parent)
+    : QWidget(parent),
+    tabs(new QTabWidget(this)),
+    localView(new QTableView(this)),
+    importLocalButton(new QPushButton(tr("Import Local"), this)),
+    webView(new QTableView(this)),
+    importWebButton(new QPushButton(tr("Import Web"), this)),
+    requirementsPreview(new QPlainTextEdit(this)),
+    maxItemsSpin(new QSpinBox(this)),
+    backButton(new QPushButton(tr("Back"), this)),
+    m_maxItems(10)
+{
+    setupUi();
+    loadSettings();
+}
+
+/******************************************************************
+ * setupUi
+ ******************************************************************/
+void MatrixHistory::setupUi()
+{
+    // Local tab
+    QWidget *localTab = new QWidget(this);
+    QVBoxLayout *localLayout = new QVBoxLayout(localTab);
+    localLayout->addWidget(localView);
+    localLayout->addWidget(importLocalButton);
+    tabs->addTab(localTab, tr("Local"));
+
+    // Web tab
+    QWidget *webTab = new QWidget(this);
+    QVBoxLayout *webLayout = new QVBoxLayout(webTab);
+    webLayout->addWidget(webView);
+    webLayout->addWidget(importWebButton);
+    tabs->addTab(webTab, tr("Web"));
+
+    // Requirements preview tab
+    QWidget *reqTab = new QWidget(this);
+    QVBoxLayout *reqLayout = new QVBoxLayout(reqTab);
+    requirementsPreview->setReadOnly(true);
+    reqLayout->addWidget(requirementsPreview);
+    tabs->addTab(reqTab, tr("Requirements"));
+
+    // Settings tab
+    QWidget *settingsTab = new QWidget(this);
+    QVBoxLayout *settingsLayout = new QVBoxLayout(settingsTab);
+    maxItemsSpin->setRange(1, 100);
+    settingsLayout->addWidget(maxItemsSpin);
+    settingsLayout->addWidget(backButton);
+    tabs->addTab(settingsTab, tr("Settings"));
+
+    // Main layout
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->addWidget(tabs);
+    setLayout(mainLayout);
+
+    // Connections
+    connect(importLocalButton, &QPushButton::clicked,
+            this, &MatrixHistory::importLocalSelected);
+    connect(importWebButton, &QPushButton::clicked,
+            this, &MatrixHistory::importWebSelected);
+    connect(backButton, &QPushButton::clicked,
+            this, &MatrixHistory::backToMain);
+    connect(maxItemsSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MatrixHistory::maxItemsChanged);
+}
+/******************************************************************
+ * importLocalSelected
+ ******************************************************************/
+void MatrixHistory::importLocalSelected()
+{
+    // TODO: replace with actual selection from localView
+    QString path = "dummy_local.txt";
+
+    // Update preview tab
+    requirementsPreview->setPlainText(
+        tr("Preview of local requirements from: %1").arg(path));
+
+    emit localHistoryImported(path);
+}
+
+/******************************************************************
+ * importWebSelected
+ ******************************************************************/
+void MatrixHistory::importWebSelected()
+{
+    // TODO: replace with actual selection from webView
+    QString url = "http://example.com/requirements.txt";
+
+    // Update preview tab
+    requirementsPreview->setPlainText(
+        tr("Preview of web requirements from: %1").arg(url));
+
+    emit webHistoryImported(url);
+}
+
+/******************************************************************
+ * backToMain
+ ******************************************************************/
+void MatrixHistory::backToMain()
+{
+    emit exitRequested();
+}
+
+/******************************************************************
+ * loadSettings / saveSettings
+ ******************************************************************/
+void MatrixHistory::loadSettings()
+{
+    QSettings s("PipMatrixResolverQt", "MatrixHistory");
+    m_maxItems    = s.value("recent/maxItems", 20).toInt();
+    m_recentLocal = s.value("recent/local").toStringList();
+    m_recentWeb   = s.value("recent/web").toStringList();
+    maxItemsSpin->setValue(m_maxItems);
+
+    refreshLocalTab();
+    refreshWebTab();
+}
+
+/******************************************************************
+ * saveSettings
+ ******************************************************************/
+void MatrixHistory::saveSettings() const
+{
+    QSettings s("PipMatrixResolverQt", "MatrixHistory");
+    s.setValue("recent/maxItems", m_maxItems);
+    s.setValue("recent/local", m_recentLocal);
+    s.setValue("recent/web", m_recentWeb);
+}
+
+/******************************************************************
+ * refreshLocalTab
+ ******************************************************************/
+void MatrixHistory::refreshLocalTab()
+{
+    auto *model = new QStandardItemModel(this);
+    model->setHorizontalHeaderLabels({ tr("Local Files") });
+
+    for (const QString &path : std::as_const(m_recentLocal))
+    {
+        auto *item = new QStandardItem(path);
+        item->setEditable(false);
+        model->appendRow(item);
+    }
+
+    localView->setModel(model);
+    localView->horizontalHeader()->setStretchLastSection(true);
+}
+
+/******************************************************************
+ * refreshWebTab
+ ******************************************************************/
+void MatrixHistory::refreshWebTab()
+{
+    auto *model = new QStandardItemModel(this);
+    model->setHorizontalHeaderLabels({ tr("Web URLs") });
+
+    for (const QString &url : std::as_const(m_recentWeb))
+    {
+        auto *item = new QStandardItem(url);
+        item->setEditable(false);
+        model->appendRow(item);
+    }
+
+    webView->setModel(model);
+    webView->horizontalHeader()->setStretchLastSection(true);
+}
+
+/******************************************************************
+ * refreshRequirementsTab
+ ******************************************************************/
+void MatrixHistory::refreshRequirementsTab(const QString &path)
+{
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        requirementsPreview->setPlainText(
+            QString::fromUtf8(f.readAll()));
+        f.close();
+    }
+}
+
+/******************************************************************
+ * clearHistory
+ ******************************************************************/
+void MatrixHistory::clearHistory()
+{
+    m_recentLocal.clear();
+    m_recentWeb.clear();
+
+    refreshLocalTab();
+    refreshWebTab();
+
+    saveSettings();
+
+    emit historyCleared();   // emit the signal here
+}
+
+/******************************************************************
+ * maxItemsChanged
+ ******************************************************************/
+void MatrixHistory::maxItemsChanged(int value)
+{
+    m_maxItems = value;
+    saveSettings();
+}
+
+/************** End of File.cpp **************/
+ 
+============================================== 
+FILE: MatrixHistory.h 
+============================================== 
+/******************************************************************
+ * File: MatrixHistory.h
+ * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Description:
+ *   Provides a tabbed UI for managing requirements history.
+ *   Tabs: Local, Web, Requirements, Settings.
+ *   Emits signals to import a snapshot or exit back to MainWindow.
+ *
+ * Version: 0.2
+ * Date:    2025-10-31
+ ******************************************************************/
+
+#pragma once
+
+#include <QWidget>
+#include <QStringList>
+
+class QTabWidget;
+class QTableView;
+class QPlainTextEdit;
+class QSpinBox;
+class QPushButton;
+
+/**************************************************************
+ * @brief The MatrixHistory class
+ * Provides tabbed history for local and web requirements.
+ **************************************************************/
+class MatrixHistory : public QWidget
+{
+    Q_OBJECT
+public:
+    explicit MatrixHistory(QWidget *parent = nullptr);
+
+signals:
+    /// Emitted when the user clears all history
+    void historyCleared();
+
+    /// Emitted when the user chooses a local snapshot to import.
+    void localHistoryImported(const QString &path);
+
+    /// Emitted when the user chooses a web snapshot to import.
+    void webHistoryImported(const QString &url);
+
+    /// Emitted when the user clicks Back to return to MainWindow.
+    void exitRequested();
+
+private slots:
+    void importLocalSelected();
+    void importWebSelected();
+    void backToMain();
+    void maxItemsChanged(int value);
+
+private:
+    void clearHistory();   // private helper, not a slot
+    void setupUi();
+    void loadSettings();
+    void saveSettings() const;
+    void refreshLocalTab();
+    void refreshWebTab();
+    void refreshRequirementsTab(const QString &path);
+
+    QTabWidget *tabs;
+
+    // Local tab
+    QTableView *localView;
+    QPushButton *importLocalButton;
+
+    // Web tab
+    QTableView *webView;
+    QPushButton *importWebButton;
+
+    // Requirements preview
+    QPlainTextEdit *requirementsPreview;
+
+    // Settings
+    QSpinBox *maxItemsSpin;
+    QPushButton *backButton;
+
+    QStringList m_recentLocal;
+    QStringList m_recentWeb;
+    int m_maxItems;
+};
+
+/************** End of File.h **************/
+ 
+============================================== 
+FILE: MatrixHistory.ui 
+============================================== 
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MatrixHistory</class>
+ <widget class="QWidget" name="MatrixHistory">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>290</width>
+    <height>274</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tabLocal">
+      <attribute name="title">
+       <string>Local</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="localLayout">
+       <item>
+        <widget class="QTableView" name="localView"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="importLocalButton">
+         <property name="text">
+          <string>Import Local</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabWeb">
+      <attribute name="title">
+       <string>Web</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="webLayout">
+       <item>
+        <widget class="QTableView" name="webView"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="importWebButton">
+         <property name="text">
+          <string>Import Web</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabRequirements">
+      <attribute name="title">
+       <string>Requirements</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="reqLayout">
+       <item>
+        <widget class="QPlainTextEdit" name="requirementsPreview">
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabSettings">
+      <attribute name="title">
+       <string>Settings</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="settingsLayout">
+       <item>
+        <layout class="QFormLayout" name="formLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelMaxItems">
+           <property name="text">
+            <string>Maximum History items:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QSpinBox" name="maxItemsSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>100</number>
+           </property>
+           <property name="value">
+            <number>10</number>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="clearButton">
+         <property name="text">
+          <string>Clear History</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="backButton">
+         <property name="text">
+          <string>Back</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
+ 
+============================================== 
+FILE: MatrixUtility.cpp 
+============================================== 
+/******************************************************************
+ * File: MatrixUtility.cpp
+ * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Description:
+ *   Implements utility functions for PipMatrixResolverQt.
+ *
+ * Version: 0.1
+ * Date:    2025-10-31
+ ******************************************************************/
+
+#include "MatrixUtility.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardItemModel>
+#include <QStandardItem>
+#include <QScrollBar>
+#include <QUrl>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QEventLoop>
+
+/******************************************************************
+ * logsDir
+ ******************************************************************/
+QString MatrixUtility::logsDir()
+{
+    QDir dir("logs");
+    if (!dir.exists()) dir.mkpath(".");
+    return dir.absolutePath();
+}
+
+/******************************************************************
+ * historyDir
+ ******************************************************************/
+QString MatrixUtility::historyDir()
+{
+    QDir dir("requirement-history");
+    if (!dir.exists()) dir.mkpath(".");
+    return dir.absolutePath();
+}
+
+/******************************************************************
+ * normalizeRawUrl
+ ******************************************************************/
+QString MatrixUtility::normalizeRawUrl(const QString& url)
+{
+    const QUrl u(url);
+    const QString host = u.host().toLower();
+    if (host == "github.com") {
+        const QStringList parts = u.path().split('/', Qt::SkipEmptyParts);
+        if (parts.size() >= 5 && parts[2] == "blob") {
+            const QString owner = parts[0];
+            const QString repo  = parts[1];
+            const QString branch = parts[3];
+            QString rest = parts.mid(4).join('/');
+            return QString("https://raw.githubusercontent.com/%1/%2/%3/%4")
+                .arg(owner, repo, branch, rest);
+        }
+    }
+    if (host == "raw.githubusercontent.com") {
+        return url;
+    }
+    return url;
+}
+
+/******************************************************************
+ * readTextFileLines
+ ******************************************************************/
+QStringList MatrixUtility::readTextFileLines(const QString& path)
+{
+    QStringList lines;
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        while (!f.atEnd()) {
+            lines << QString::fromUtf8(f.readLine()).trimmed();
+        }
+        f.close();
+    }
+    return lines;
+}
+
+/******************************************************************
+ * writeTableToModel
+ ******************************************************************/
+void MatrixUtility::writeTableToModel(QStandardItemModel* model,
+                                      const QStringList& lines)
+{
+    if (!model) return;
+    model->clear();
+    model->setColumnCount(1);
+    model->setHorizontalHeaderLabels({ QObject::tr("requirements.txt") });
+    for (int i = 0; i < lines.size(); ++i) {
+        auto* item = new QStandardItem(lines[i]);
+        item->setEditable(false);
+        model->setItem(i, 0, item);
+    }
+}
+
+/******************************************************************
+ * ensureViewScrollable
+ ******************************************************************/
+void MatrixUtility::ensureViewScrollable(QTableView* view)
+{
+    if (!view) return;
+    view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    if (auto* sb = view->verticalScrollBar()) {
+        sb->setVisible(true);
+    }
+}
+
+/******************************************************************
+ * downloadText
+ ******************************************************************/
+bool MatrixUtility::downloadText(const QString& url, QByteArray& out)
+{
+    const QUrl u(url);
+    if (u.isLocalFile() || QFileInfo::exists(url))
+    {
+        QFile f(u.isLocalFile() ? u.toLocalFile() : url);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            out = f.readAll();
+            f.close();
+            return true;
+        }
+        return false;
+    }
+
+    QNetworkAccessManager mgr;
+    QNetworkRequest req{ QUrl(url) };
+    QEventLoop loop;
+    QNetworkReply* reply = mgr.get(req);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        out = reply->readAll();
+        reply->deleteLater();
+        return true;
+    }
+    else
+    {
+        reply->deleteLater();
+        return false;
+    }
+}
+
+/************** End of File.cpp **************/
+ 
+============================================== 
+FILE: MatrixUtility.h 
+============================================== 
+/******************************************************************
+ * File: MatrixUtility.h
+ * Author: Jeffrey Scott Flesher, Microsoft Copilot
+ * Description:
+ *   Provides utility functions for PipMatrixResolverQt.
+ *   Handles requirements history, URL normalization,
+ *   persistence, and view helpers.
+ *
+ * Version: 0.1
+ * Date:    2025-10-31
+ ******************************************************************/
+
+#pragma once
+
+#include <QString>
+#include <QStringList>
+#include <QByteArray>
+#include <QTableView>
+
+class QStandardItemModel;
+
+namespace MatrixUtility
+{
+/**************************************************************
+ * Directory helpers
+**************************************************************/
+QString logsDir();
+QString historyDir();
+
+/**************************************************************
+ * URL helpers
+ **************************************************************/
+QString normalizeRawUrl(const QString& url);
+
+/**************************************************************
+ * File helpers
+ **************************************************************/
+QStringList readTextFileLines(const QString& path);
+void writeTableToModel(QStandardItemModel* model, const QStringList& lines);
+
+/**************************************************************
+ * View helpers
+ **************************************************************/
+void ensureViewScrollable(QTableView* view);
+
+/**************************************************************
+ * Network helpers
+ **************************************************************/
+bool downloadText(const QString& url, QByteArray& out);
+}
+
+/************** End of File.h **************/
  
 ============================================== 
 FILE: PipToolsRunner.cpp 
@@ -1168,89 +2319,113 @@ private:
 FILE: VenvManager.cpp 
 ============================================== 
 #include "VenvManager.h"
-#include <QDir>
-#include <QFileInfo>
+#include <QDebug>
 
 VenvManager::VenvManager(QObject *parent) : QObject(parent)
 {
 }
 
-bool VenvManager::runCmd(const QStringList &cmd, const QProcessEnvironment &penv)
-{
-    QProcess p;
-    if (!penv.isEmpty()) p.setProcessEnvironment(penv);
-    p.setProgram(cmd.first());
-    p.setArguments(cmd.mid(1));
-    connect(&p, &QProcess::readyReadStandardOutput, [&]()
-    {
-        emit logMessage(QString::fromUtf8(p.readAllStandardOutput()));
-    });
-    connect(&p, &QProcess::readyReadStandardError, [&]()
-    {
-        emit logMessage(QString::fromUtf8(p.readAllStandardError()));
-    });
-    p.start();
-    if (!p.waitForStarted()) return false;
-    p.waitForFinished(-1);
-    return p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
-}
-
 bool VenvManager::createVenv(const QString &dir, const QString &pythonVer)
 {
-    m_venvDir = dir;
-    QDir().mkpath(dir);
-    QString py = QString("python%1").arg(pythonVer);
-    if (!runCmd({py, "-m", "venv", dir})) return false;
-#ifdef Q_OS_WIN
-    m_python = QDir(dir).filePath("Scripts/python.exe");
-#else
-    m_python = QDir(dir).filePath("bin/python");
-#endif
-    return QFileInfo::exists(m_python);
+    // TODO: implement actual venv creation logic
+    emit logMessage(QString("Creating venv at %1 with Python %2").arg(dir, pythonVer));
+    return true;
 }
 
 bool VenvManager::upgradePip(const QString &pipVer, const QString &pipToolsVer)
 {
-    return runCmd({m_python, "-m", "pip", "install", "--upgrade", QString("pip==%1").arg(pipVer), "setuptools", "wheel"})
-        && runCmd({m_python, "-m", "pip", "install", "--upgrade", QString("pip-tools==%1").arg(pipToolsVer)});
-} 
+    // TODO: implement actual pip upgrade logic
+    emit logMessage(QString("Upgrading pip to %1 and pip-tools to %2").arg(pipVer, pipToolsVer));
+    return true;
+}
+
+bool VenvManager::createOrUpdate(const QString &dir,
+                                 const QString &pythonVer,
+                                 const QString &pipVer,
+                                 const QString &pipToolsVer)
+{
+    emit logMessage("Starting createOrUpdate workflow...");
+
+    if (!createVenv(dir, pythonVer)) {
+        emit logMessage("createVenv failed");
+        return false;
+    }
+
+    if (!upgradePip(pipVer, pipToolsVer)) {
+        emit logMessage("upgradePip failed");
+        return false;
+    }
+
+    emit logMessage("createOrUpdate completed successfully");
+    return true;
+}
+ 
 ============================================== 
 FILE: VenvManager.h 
 ============================================== 
 #pragma once
 #include <QObject>
-#include <QProcess>
+#include <QString>
 
 class VenvManager : public QObject
 {
     Q_OBJECT
 public:
     explicit VenvManager(QObject *parent = nullptr);
+
+    // Existing API
     bool createVenv(const QString &dir, const QString &pythonVer);
     bool upgradePip(const QString &pipVer, const QString &pipToolsVer);
-    QString venvPython() const { return m_python; }
+
+    // New convenience wrapper
+    bool createOrUpdate(const QString &dir = "venv",
+                        const QString &pythonVer = "3.11",
+                        const QString &pipVer = "24.0",
+                        const QString &pipToolsVer = "7.4.1");
 
 signals:
     void logMessage(const QString &line);
-
-private:
-    QString m_venvDir;
-    QString m_python;
-    bool runCmd(const QStringList &cmd, const QProcessEnvironment &penv = QProcessEnvironment());
-}; 
+};
+ 
 ============================================== 
 DIRECTORY LISTING 
 ============================================== 
 . 
+├── .gitignore 
+├── cleanbash.sh 
 ├── CMakeLists.txt 
 ├── CMakeLists.txt.user 
+├── LICENSE 
 ├── PipMatrixResolverQt.qrc 
 ├── README.md 
 ├── source_files.txt 
 ├── src2txt.bat 
 ├── src2txt.sh 
-├── resources 
-│   ├── icons 
+├── .git 
+│   ├── COMMIT_EDITMSG 
+│   ├── config 
+│   ├── description 
+│   ├── FETCH_HEAD 
+│   ├── HEAD 
+│   ├── hooks 
+│   ├── index 
+│   ├── info 
+│   ├── logs 
+│   ├── objects 
+│   ├── ORIG_HEAD 
+│   ├── refs 
+├── icons 
+│   ├── app.svg 
+│   ├── batch.svg 
+│   ├── cancel.svg 
+│   ├── info.svg 
+│   ├── open.svg 
+│   ├── pause.svg 
+│   ├── resolve.svg 
+│   ├── resume.svg 
+│   ├── stop.svg 
+│   ├── url.svg 
+│   ├── venv.svg 
 ├── src 
 │   ├── BatchRunner.cpp 
 │   ├── BatchRunner.h 
@@ -1258,6 +2433,11 @@ DIRECTORY LISTING
 │   ├── MainWindow.cpp 
 │   ├── MainWindow.h 
 │   ├── MainWindow.ui 
+│   ├── MatrixHistory.cpp 
+│   ├── MatrixHistory.h 
+│   ├── MatrixHistory.ui 
+│   ├── MatrixUtility.cpp 
+│   ├── MatrixUtility.h 
 │   ├── PipToolsRunner.cpp 
 │   ├── PipToolsRunner.h 
 │   ├── ResolverEngine.cpp 
@@ -1271,6 +2451,11 @@ DIRECTORY LISTING
 │   ├── MainWindow.cpp.txt 
 │   ├── MainWindow.h.txt 
 │   ├── MainWindow.ui.txt 
+│   ├── MatrixHistory.cpp.txt 
+│   ├── MatrixHistory.h.txt 
+│   ├── MatrixHistory.ui.txt 
+│   ├── MatrixUtility.cpp.txt 
+│   ├── MatrixUtility.h.txt 
 │   ├── PipMatrixResolverQt.qrc.txt 
 │   ├── PipToolsRunner.cpp.txt 
 │   ├── PipToolsRunner.h.txt 
@@ -1286,6 +2471,14 @@ DIRECTORY LISTING
 │   ├── test_mainwindow.cpp 
 │   ├── test_resolver.cpp 
 ├── translations 
+│   ├── MatrixHistory_en.qm 
+│   ├── MatrixHistory_en.ts 
+│   ├── MatrixHistory_es.qm 
+│   ├── MatrixHistory_es.ts 
+│   ├── MatrixUtility_en.qm 
+│   ├── MatrixUtility_en.ts 
+│   ├── MatrixUtility_es.qm 
+│   ├── MatrixUtility_es.ts 
 │   ├── PipMatrixResolverQt_en.qm 
 │   ├── PipMatrixResolverQt_en.ts 
 │   ├── PipMatrixResolverQt_es.qm 

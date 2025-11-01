@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.1" language="es" sourcelanguage="en">
+<TS version="2.1" language="en">
 <context>
     <name>MainWindow</name>
     <message>
@@ -258,17 +258,17 @@
     <message>
         <location filename="../src/MatrixHistory.cpp" line="53"/>
         <source>Import Selected</source>
-        <translation type="unfinished"></translation>
+        <translation>Import Selected</translation>
     </message>
     <message>
         <location filename="../src/MatrixHistory.cpp" line="54"/>
         <source>Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Back</translation>
     </message>
     <message>
         <location filename="../src/MatrixHistory.cpp" line="79"/>
         <source>Clear History</source>
-        <translation type="unfinished"></translation>
+        <translation>Clear History</translation>
     </message>
     <message>
         <location filename="../src/MatrixHistory.cpp" line="84"/>

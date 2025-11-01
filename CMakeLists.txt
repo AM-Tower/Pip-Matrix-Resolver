@@ -15,15 +15,17 @@ qt_standard_project_setup()
 set(TS_FILES
     translations/PipMatrixResolverQt_en.ts
     translations/PipMatrixResolverQt_es.ts
+    translations/MatrixUtility_en.ts
+    translations/MatrixUtility_es.ts
+    translations/MatrixHistory_en.ts
+    translations/MatrixHistory_es.ts
 )
 
-# Generate .qm files in the build tree
 qt_add_translation(QM_FILES ${TS_FILES})
 
 # --------------------------------------------------
-# Resources
+# Resources (icons + translations)
 # --------------------------------------------------
-# Compile the .qrc file (which references icons + .qm files)
 qt_add_resources(APP_RESOURCES PipMatrixResolverQt.qrc)
 
 # --------------------------------------------------
@@ -42,9 +44,11 @@ qt_add_executable(PipMatrixResolverQt
     src/PipToolsRunner.h
     src/BatchRunner.cpp
     src/BatchRunner.h
-    ${APP_RESOURCES}   # compiled qrc
-    ${QM_FILES}
-    README.md        # ensures .qm files are built before linking
+    src/MatrixUtility.h src/MatrixUtility.cpp
+    src/MatrixHistory.h src/MatrixHistory.cpp src/MatrixHistory.ui
+
+    ${APP_RESOURCES}
+    ${QM_FILES}   # ensures .qm files are built before linking
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
@@ -59,26 +63,13 @@ target_link_libraries(PipMatrixResolverQt PRIVATE
 # --------------------------------------------------
 # Deployment logic
 # --------------------------------------------------
-if(APPLE)
-    set_target_properties(PipMatrixResolverQt PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.${PROJECT_NAME}"
-        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    )
-endif()
-
 if(WIN32)
-    find_program(WINDEPLOYQT_EXECUTABLE
-        NAMES windeployqt
-        HINTS "${Qt6_DIR}/../../../bin" ENV PATH
-    )
+    find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${Qt6_DIR}/../../../bin" ENV PATH)
     if(WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET PipMatrixResolverQt POST_BUILD
             COMMAND ${WINDEPLOYQT_EXECUTABLE} --verbose 0 --no-compiler-runtime "$<TARGET_FILE:PipMatrixResolverQt>"
             COMMENT "Deploying Qt runtime for PipMatrixResolverQt (Windows)"
         )
-    else()
-        message(WARNING "⚠️ windeployqt not found — skipping Qt deployment step.")
     endif()
 elseif(APPLE)
     find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt HINTS "${Qt6_DIR}/../../../bin" ENV PATH)

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MatrixHistory</class>
+ <widget class="QWidget" name="MatrixHistory">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>290</width>
+    <height>274</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="tabLocal">
+      <attribute name="title">
+       <string>Local</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="localLayout">
+       <item>
+        <widget class="QTableView" name="localView"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="importLocalButton">
+         <property name="text">
+          <string>Import Local</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabWeb">
+      <attribute name="title">
+       <string>Web</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="webLayout">
+       <item>
+        <widget class="QTableView" name="webView"/>
+       </item>
+       <item>
+        <widget class="QPushButton" name="importWebButton">
+         <property name="text">
+          <string>Import Web</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabRequirements">
+      <attribute name="title">
+       <string>Requirements</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="reqLayout">
+       <item>
+        <widget class="QPlainTextEdit" name="requirementsPreview">
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tabSettings">
+      <attribute name="title">
+       <string>Settings</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="settingsLayout">
+       <item>
+        <layout class="QFormLayout" name="formLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="labelMaxItems">
+           <property name="text">
+            <string>Maximum History items:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QSpinBox" name="maxItemsSpin">
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>100</number>
+           </property>
+           <property name="value">
+            <number>10</number>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QPushButton" name="clearButton">
+         <property name="text">
+          <string>Clear History</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="backButton">
+         <property name="text">
+          <string>Back</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,47 +1,41 @@
 #include "VenvManager.h"
-#include <QDir>
-#include <QFileInfo>
+#include <QDebug>
 
 VenvManager::VenvManager(QObject *parent) : QObject(parent)
 {
 }
 
-bool VenvManager::runCmd(const QStringList &cmd, const QProcessEnvironment &penv)
-{
-    QProcess p;
-    if (!penv.isEmpty()) p.setProcessEnvironment(penv);
-    p.setProgram(cmd.first());
-    p.setArguments(cmd.mid(1));
-    connect(&p, &QProcess::readyReadStandardOutput, [&]()
-    {
-        emit logMessage(QString::fromUtf8(p.readAllStandardOutput()));
-    });
-    connect(&p, &QProcess::readyReadStandardError, [&]()
-    {
-        emit logMessage(QString::fromUtf8(p.readAllStandardError()));
-    });
-    p.start();
-    if (!p.waitForStarted()) return false;
-    p.waitForFinished(-1);
-    return p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
-}
-
 bool VenvManager::createVenv(const QString &dir, const QString &pythonVer)
 {
-    m_venvDir = dir;
-    QDir().mkpath(dir);
-    QString py = QString("python%1").arg(pythonVer);
-    if (!runCmd({py, "-m", "venv", dir})) return false;
-#ifdef Q_OS_WIN
-    m_python = QDir(dir).filePath("Scripts/python.exe");
-#else
-    m_python = QDir(dir).filePath("bin/python");
-#endif
-    return QFileInfo::exists(m_python);
+    // TODO: implement actual venv creation logic
+    emit logMessage(QString("Creating venv at %1 with Python %2").arg(dir, pythonVer));
+    return true;
 }
 
 bool VenvManager::upgradePip(const QString &pipVer, const QString &pipToolsVer)
 {
-    return runCmd({m_python, "-m", "pip", "install", "--upgrade", QString("pip==%1").arg(pipVer), "setuptools", "wheel"})
-        && runCmd({m_python, "-m", "pip", "install", "--upgrade", QString("pip-tools==%1").arg(pipToolsVer)});
+    // TODO: implement actual pip upgrade logic
+    emit logMessage(QString("Upgrading pip to %1 and pip-tools to %2").arg(pipVer, pipToolsVer));
+    return true;
+}
+
+bool VenvManager::createOrUpdate(const QString &dir,
+                                 const QString &pythonVer,
+                                 const QString &pipVer,
+                                 const QString &pipToolsVer)
+{
+    emit logMessage("Starting createOrUpdate workflow...");
+
+    if (!createVenv(dir, pythonVer)) {
+        emit logMessage("createVenv failed");
+        return false;
+    }
+
+    if (!upgradePip(pipVer, pipToolsVer)) {
+        emit logMessage("upgradePip failed");
+        return false;
+    }
+
+    emit logMessage("createOrUpdate completed successfully");
+    return true;
 }

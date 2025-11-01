@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
-<TS version="2.1" language="es" sourcelanguage="en">
+<TS version="2.1" language="en">
 <context>
     <name>MainWindow</name>
     <message>
@@ -289,6 +289,17 @@
         <location filename="../src/MatrixHistory.cpp" line="119"/>
         <source>History Item</source>
         <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>MatrixUtility</name>
+    <message>
+        <source>Loading requirements...</source>
+        <translation type="vanished">Loading requirements...</translation>
+    </message>
+    <message>
+        <source>Failed to open file</source>
+        <translation type="vanished">Failed to open file</translation>
     </message>
 </context>
 <context>

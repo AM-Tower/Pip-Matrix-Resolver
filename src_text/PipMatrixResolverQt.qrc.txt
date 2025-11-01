@@ -1,18 +1,25 @@
 <RCC>
-    <qresource prefix="/">
-        <!-- Translations -->
+    <!-- Icons -->
+    <qresource prefix="/icons">
+        <file>icons/app.svg</file>
+        <file>icons/open.svg</file>
+        <file>icons/url.svg</file>
+        <file>icons/venv.svg</file>
+        <file>icons/resolve.svg</file>
+        <file>icons/pause.svg</file>
+        <file>icons/resume.svg</file>
+        <file>icons/stop.svg</file>
+        <file>icons/batch.svg</file>
+        <file>icons/info.svg</file>
+    </qresource>
+
+    <!-- Translations -->
+    <qresource prefix="/translations">
         <file>translations/PipMatrixResolverQt_en.qm</file>
         <file>translations/PipMatrixResolverQt_es.qm</file>
-        <!-- Icons -->
-        <file>resources/icons/app.svg</file>
-        <file>resources/icons/open.svg</file>
-        <file>resources/icons/url.svg</file>
-        <file>resources/icons/venv.svg</file>
-        <file>resources/icons/resolve.svg</file>
-        <file>resources/icons/pause.svg</file>
-        <file>resources/icons/resume.svg</file>
-        <file>resources/icons/stop.svg</file>
-        <file>resources/icons/batch.svg</file>
-        <file>resources/icons/info.svg</file>
+        <file>translations/MatrixUtility_en.qm</file>
+        <file>translations/MatrixUtility_es.qm</file>
+        <file>translations/MatrixHistory_en.qm</file>
+        <file>translations/MatrixHistory_es.qm</file>
     </qresource>
 </RCC>

@@ -16,39 +16,132 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <widget class="QSplitter" name="splitter">
-      <property name="orientation">
-       <enum>Qt::Orientation::Horizontal</enum>
+     <widget class="QTabWidget" name="mainTabs">
+      <property name="currentIndex">
+       <number>0</number>
       </property>
-      <widget class="QTableView" name="requirementsView"/>
-      <widget class="QTableView" name="matrixView"/>
-     </widget>
-    </item>
-    <item>
-     <widget class="QSplitter" name="bottomSplitter">
-      <property name="orientation">
-       <enum>Qt::Orientation::Horizontal</enum>
-      </property>
-      <widget class="QPlainTextEdit" name="logView">
-       <property name="readOnly">
-        <bool>true</bool>
-       </property>
+      <widget class="QWidget" name="tabMain">
+       <attribute name="title">
+        <string>Main</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="mainLayout">
+        <item>
+         <widget class="QSplitter" name="splitter">
+          <property name="orientation">
+           <enum>Qt::Orientation::Horizontal</enum>
+          </property>
+          <widget class="QTableView" name="requirementsView"/>
+          <widget class="QTableView" name="matrixView"/>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSplitter" name="bottomSplitter">
+          <property name="orientation">
+           <enum>Qt::Orientation::Horizontal</enum>
+          </property>
+          <widget class="QPlainTextEdit" name="logView">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+          <widget class="QProgressBar" name="progressBar"/>
+         </widget>
+        </item>
+       </layout>
       </widget>
-      <widget class="QProgressBar" name="progressBar"/>
+      <widget class="QWidget" name="tabSettings">
+       <attribute name="title">
+        <string>Settings</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="settingsLayout">
+        <item>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="labelPythonVersion">
+            <property name="text">
+             <string>Python version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QLineEdit" name="pythonVersionEdit">
+            <property name="text">
+             <string>3.11</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="labelPipVersion">
+            <property name="text">
+             <string>pip version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="pipVersionEdit">
+            <property name="text">
+             <string>24.0</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="labelPipToolsVersion">
+            <property name="text">
+             <string>pip-tools version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="pipToolsVersionEdit">
+            <property name="text">
+             <string>7.4.1</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPushButton" name="saveSettingsButton">
+          <property name="text">
+           <string>Save Settings</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="restoreDefaultsButton">
+          <property name="text">
+           <string>Restore Defaults</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
      </widget>
     </item>
    </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>900</width>
+     <height>20</height>
+    </rect>
+   </property>
    <widget class="QMenu" name="menuFile">
-    <property name="title"><string>&amp;File</string></property>
+    <property name="title">
+     <string>&amp;File</string>
+    </property>
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
    <widget class="QMenu" name="menuTools">
-    <property name="title"><string>&amp;Tools</string></property>
+    <property name="title">
+     <string>&amp;Tools</string>
+    </property>
     <addaction name="actionCreateVenv"/>
     <addaction name="actionResolveMatrix"/>
     <addaction name="actionPause"/>
@@ -56,11 +149,15 @@
     <addaction name="actionStop"/>
    </widget>
    <widget class="QMenu" name="menuBatch">
-    <property name="title"><string>&amp;Batch</string></property>
+    <property name="title">
+     <string>&amp;Batch</string>
+    </property>
     <addaction name="actionRunBatch"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
-    <property name="title"><string>&amp;Help</string></property>
+    <property name="title">
+     <string>&amp;Help</string>
+    </property>
     <addaction name="actionAbout"/>
    </widget>
    <addaction name="menuFile"/>
@@ -70,8 +167,15 @@
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="mainToolBar">
-   <property name="windowTitle"><string>Main Toolbar</string></property>
-   <attribute name="toolBarArea"><enum>TopToolBarArea</enum></attribute>
+   <property name="windowTitle">
+    <string>Main Toolbar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
    <addaction name="actionOpenRequirements"/>
    <addaction name="actionFetchRequirements"/>
    <addaction name="actionCreateVenv"/>
@@ -82,83 +186,95 @@
    <addaction name="actionRunBatch"/>
    <addaction name="actionAbout"/>
   </widget>
-
-  <!-- Actions with cleaned iconsets -->
   <action name="actionOpenRequirements">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/open.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/open.svg</normaloff>:/icons/icons/open.svg</iconset>
    </property>
-   <property name="text"><string>Open requirements file...</string></property>
+   <property name="text">
+    <string>Open requirements file...</string>
+   </property>
   </action>
   <action name="actionFetchRequirements">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/url.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/url.svg</normaloff>:/icons/icons/url.svg</iconset>
    </property>
-   <property name="text"><string>Fetch requirements from URL...</string></property>
+   <property name="text">
+    <string>Fetch requirements from URL...</string>
+   </property>
   </action>
   <action name="actionExit">
-   <property name="text"><string>Exit</string></property>
+   <property name="text">
+    <string>Exit</string>
+   </property>
   </action>
   <action name="actionCreateVenv">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/venv.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/venv.svg</normaloff>:/icons/icons/venv.svg</iconset>
    </property>
-   <property name="text"><string>Create/Update venv</string></property>
+   <property name="text">
+    <string>Create/Update venv</string>
+   </property>
   </action>
   <action name="actionResolveMatrix">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/resolve.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/resolve.svg</normaloff>:/icons/icons/resolve.svg</iconset>
    </property>
-   <property name="text"><string>Resolve matrix</string></property>
+   <property name="text">
+    <string>Resolve matrix</string>
+   </property>
   </action>
   <action name="actionPause">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/pause.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/pause.svg</normaloff>:/icons/icons/pause.svg</iconset>
    </property>
-   <property name="text"><string>Pause</string></property>
+   <property name="text">
+    <string>Pause</string>
+   </property>
   </action>
   <action name="actionResume">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/resume.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/resume.svg</normaloff>:/icons/icons/resume.svg</iconset>
    </property>
-   <property name="text"><string>Resume</string></property>
+   <property name="text">
+    <string>Resume</string>
+   </property>
   </action>
   <action name="actionStop">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/stop.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/stop.svg</normaloff>:/icons/icons/stop.svg</iconset>
    </property>
-   <property name="text"><string>Stop</string></property>
+   <property name="text">
+    <string>Stop</string>
+   </property>
   </action>
   <action name="actionRunBatch">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/batch.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/batch.svg</normaloff>:/icons/icons/batch.svg</iconset>
    </property>
-   <property name="text"><string>Run batch conversion to mp4</string></property>
+   <property name="text">
+    <string>Run batch conversion to mp4</string>
+   </property>
   </action>
   <action name="actionAbout">
    <property name="icon">
-    <iconset>
-     <normaloff>:/resources/icons/info.svg</normaloff>
-    </iconset>
+    <iconset resource="../PipMatrixResolverQt.qrc">
+     <normaloff>:/icons/icons/info.svg</normaloff>:/icons/icons/info.svg</iconset>
    </property>
-   <property name="text"><string>About</string></property>
+   <property name="text">
+    <string>About</string>
+   </property>
   </action>
  </widget>
+ <resources>
+  <include location="../PipMatrixResolverQt.qrc"/>
+ </resources>
  <connections/>
 </ui>
