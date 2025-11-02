@@ -15,10 +15,6 @@ qt_standard_project_setup()
 set(TS_FILES
     translations/PipMatrixResolverQt_en.ts
     translations/PipMatrixResolverQt_es.ts
-    translations/MatrixUtility_en.ts
-    translations/MatrixUtility_es.ts
-    translations/MatrixHistory_en.ts
-    translations/MatrixHistory_es.ts
 )
 
 qt_add_translation(QM_FILES ${TS_FILES})
@@ -44,8 +40,6 @@ qt_add_executable(PipMatrixResolverQt
     src/PipToolsRunner.h
     src/BatchRunner.cpp
     src/BatchRunner.h
-    src/MatrixUtility.h src/MatrixUtility.cpp
-    src/MatrixHistory.h src/MatrixHistory.cpp
 
     ${APP_RESOURCES}
     ${QM_FILES}   # ensures .qm files are built before linking

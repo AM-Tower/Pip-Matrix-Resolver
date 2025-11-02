@@ -8,73 +8,34 @@
  * @section License Unlicensed, MIT, or any.
  * @section DESCRIPTION
  * Main window interface for PipMatrixResolver Qt application.
- * Includes forward declarations, settings API, history, menus,
- * and shared loaders for files and URLs. Uses C-style braces.
+ * Includes settings API, history, menus, and shared loaders for
+ * files and URLs. Uses C-style braces.
  ***************************************************************/
 
 #pragma once
-
 #include <QMainWindow>
 #include <QStringList>
 #include <QTimer>
-#include "ResolverEngine.h"
-#include "VenvManager.h"
-#include "BatchRunner.h"
-#include "MatrixHistory.h"
-
-/****************************************************************
- * @class ResolverEngine
- * @brief Forward declaration for resolver engine.
- ***************************************************************/
-class ResolverEngine;
-
-/****************************************************************
- * @class VenvManager
- * @brief Forward declaration for venv manager.
- ***************************************************************/
-class VenvManager;
-
-/****************************************************************
- * @class BatchRunner
- * @brief Forward declaration for batch runner.
- ***************************************************************/
-class BatchRunner;
-
-/****************************************************************
- * @class MatrixHistory
- * @brief Forward declaration for history widget.
- ***************************************************************/
-class MatrixHistory;
-
-/****************************************************************
- * @class QStandardItemModel
- * @brief Forward declaration for model.
- ***************************************************************/
-class QStandardItemModel;
-
-/****************************************************************
- * @class QPlainTextEdit
- * @brief Forward declaration for log view.
- ***************************************************************/
-class QPlainTextEdit;
-
-/****************************************************************
- * @class QProgressBar
- * @brief Forward declaration for progress bar.
- ***************************************************************/
-class QProgressBar;
-
-/****************************************************************
- * @class QTableView
- * @brief Forward declaration for table view.
- ***************************************************************/
-class QTableView;
-
-/****************************************************************
- * @class QMenu
- * @brief Forward declaration for menu.
- ***************************************************************/
-class QMenu;
+#include <QStandardItemModel>
+#include <QTableView>
+#include <QPlainTextEdit>
+#include <QProgressBar>
+#include <QMenu>
+#include <QAction>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QFile>
+#include <QDir>
+#include <QFileInfo>
+#include <QByteArray>
+#include <QDialog>
+#include <QTextBrowser>
+#include <QVBoxLayout>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QSettings>
+#include <QDateTime>
+#include <QDebug>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -82,191 +43,105 @@ QT_END_NAMESPACE
 
 /****************************************************************
  * @class MainWindow
- * @brief Central application window for PipMatrixResolver.
+ * @brief Implements the main application window.
  ***************************************************************/
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-
 public:
-    /************************************************************
-     * @brief Construct the main window.
-     * @param parent Parent widget pointer.
-     ***********************************************************/
     explicit MainWindow(QWidget *parent = nullptr);
-
-    /************************************************************
-     * @brief Destroy the main window.
-     ***********************************************************/
     ~MainWindow();
 
+    // QSettings
+    static const QString kOrganizationName;
+    static const QString kApplicationName;
+    // Globals
+    static QString appVersion;
+
 private slots:
-    /************************************************************
-     * @brief Open requirements from a local file via dialog.
-     ***********************************************************/
     void openLocalRequirements();
-
-    /************************************************************
-     * @brief Fetch requirements from a URL via dialog.
-     ***********************************************************/
     void fetchRequirementsFromUrl();
-
-    /************************************************************
-     * @brief Refresh recent menus for local and web items.
-     ***********************************************************/
     void refreshRecentMenus();
-
-    /************************************************************
-     * @brief Clear both local and web recent history lists.
-     ***********************************************************/
     void clearAllHistory();
-
-    /************************************************************
-     * @brief Load application settings from QSettings to UI.
-     ***********************************************************/
     void loadAppSettings();
-
-    /************************************************************
-     * @brief Save application settings from UI to QSettings.
-     ***********************************************************/
     void saveAppSettings();
-
-    /************************************************************
-     * @brief Validate and clamp settings to safe ranges.
-     ***********************************************************/
     void validateAppSettings();
-
-    /************************************************************
-     * @brief Apply settings from UI widgets to member state.
-     ***********************************************************/
     void applySettingsFromUi();
-
-    /************************************************************
-     * @brief Update UI widgets to reflect current settings.
-     ***********************************************************/
     void updateUiFromSettings();
-
-    /************************************************************
-     * @brief Start matrix resolution (existing behavior).
-     ***********************************************************/
     void startResolve();
-
-    /************************************************************
-     * @brief Pause matrix resolution (existing behavior).
-     ***********************************************************/
     void pauseResolve();
-
-    /************************************************************
-     * @brief Resume matrix resolution (existing behavior).
-     ***********************************************************/
     void resumeResolve();
-
-    /************************************************************
-     * @brief Stop matrix resolution (existing behavior).
-     ***********************************************************/
     void stopResolve();
-
-    /************************************************************
-     * @brief Append a line to the log view with timestamp.
-     * @param line The message line to append.
-     ***********************************************************/
     void appendLog(const QString &line);
-
-    /************************************************************
-     * @brief Update progress bar percent.
-     * @param percent The progress value (0-100).
-     ***********************************************************/
     void updateProgress(int percent);
-
-    /************************************************************
-     * @brief Show compiled result message path.
-     * @param path The compiled output path.
-     ***********************************************************/
     void showCompiledResult(const QString &path);
-
-    /************************************************************
-     * @brief Show About dialog using current appVersion.
-     ***********************************************************/
     void showAboutBox();
-
-    /************************************************************
-     * @brief Show README dialog from resources.
-     ***********************************************************/
     void showReadmeDialog();
+    void exitApp();
+    void writeTableToModel(const QStringList &lines);
+    // Local history slots
+    void on_localAddButton_clicked();
+    void on_localEditButton_clicked();
+    void on_localDeleteButton_clicked();
+    void on_localUpButton_clicked();
+    void on_localDownButton_clicked();
 
-    /************************************************************
-     * @brief Navigate to MatrixHistory tab in main UI.
-     ***********************************************************/
-    void openMatrixHistory();
+    // Web history slots
+    void on_webAddButton_clicked();
+    void on_webEditButton_clicked();
+    void on_webDeleteButton_clicked();
+    void on_webUpButton_clicked();
+    void on_webDownButton_clicked();
 
-    /************************************************************
-     * @brief Called once after construction to finalize setup.
-     ***********************************************************/
-    void onInitialized();
+    void updateLocalHistoryButtons();
+    void updateWebHistoryButtons();
 
 private:
-    /************************************************************
-     * @brief Load requirements directly from file path.
-     * @param path Absolute or canonical file path.
-     ***********************************************************/
     void loadRequirementsFromFile(const QString &path);
-
-    /************************************************************
-     * @brief Load requirements directly from URL.
-     * @param url Normalized URL string.
-     ***********************************************************/
     void loadRequirementsFromUrl(const QString &url);
-
-    /************************************************************
-     * @brief Save recent history lists to QSettings.
-     ***********************************************************/
     void saveHistory();
-
-    /************************************************************
-     * @brief Load recent history lists from QSettings.
-     ***********************************************************/
     void loadHistory();
-
-    void applyToolsEnabled(bool enabled);
-
-    /************************************************************
-     * @brief Ensure requirementsView is scrollable and sized.
-     ***********************************************************/
-    void ensureViewScrollable();
+    /****************************************************************
+     * @brief Populates the local and web history tables in the
+     *        History tab with the current history data.
+     ***************************************************************/
+    void refreshHistoryTables();
+    /****************************************************************
+    * @brief Checks all settings in the Settings tab at startup,
+    *        restores defaults if missing, and updates the UI.
+    ***************************************************************/
+    void checkAndRestoreSettings();
 
     /****************************************************************
-    * @brief Ensure menus exist and are connected to File menu.
+    * @brief Saves all settings from the Settings tab to QSettings.
     ***************************************************************/
-    void ensureMenusInitialized();
+    void saveSettings();
+    // Utility functions moved from MatrixUtility
+    QStringList readTextFileLines(const QString &path);
+    bool validateRequirementsWithErrors(const QStringList &lines, QStringList &errors);
+    QString normalizeRawUrl(const QString &inputUrl);
+    bool downloadText(const QString &url, QByteArray &out);
+    QString logsDir();
 
-private:
-    Ui::MainWindow *ui;
-
-    // Engines
-    ResolverEngine *resolver;
-    VenvManager *venv;
-    BatchRunner *batch;
-
-    // Models/Views
-    QStandardItemModel *requirementsModel;
-    QTableView *requirementsView;
-    QPlainTextEdit *logView;
-    QProgressBar *progress;
-
-    // Menus
-    QMenu *recentLocalMenu;
-    QMenu *recentWebMenu;
-
-    // History widget
-    MatrixHistory *historyWidget;
-
-    // State
+    // History data
     QStringList historyRecentLocal;
     QStringList historyRecentWeb;
 
+    // UI pointers
+    Ui::MainWindow *ui;
+    QStandardItemModel *requirementsModel;
+    QTableView *requirementsView;
+    QPlainTextEdit *logView;
+    QTableView *localHistoryTable;
+    QTableView *webHistoryTable;
+    QStandardItemModel *localHistoryModel;
+    QStandardItemModel *webHistoryModel;
+    QProgressBar *progress;
+    QMenu *recentLocalMenu;
+    QMenu *recentWebMenu;
+
     // Settings
-    int maxHistoryItems;     // -1=unlimited, 0 invalid, ≥1 valid
-    QString appVersion;
+    int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
 };
 
 /************** End of MainWindow.h **************************/

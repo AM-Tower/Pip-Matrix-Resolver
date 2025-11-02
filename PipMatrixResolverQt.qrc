@@ -18,11 +18,8 @@
     <qresource prefix="/translations">
         <file>translations/PipMatrixResolverQt_en.qm</file>
         <file>translations/PipMatrixResolverQt_es.qm</file>
-        <file>translations/MatrixUtility_en.qm</file>
-        <file>translations/MatrixUtility_es.qm</file>
-        <file>translations/MatrixHistory_en.qm</file>
-        <file>translations/MatrixHistory_es.qm</file>
     </qresource>
+
     <!-- Docs -->
     <qresource prefix="/docs">
         <file>README.md</file>

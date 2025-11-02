@@ -1,6 +1,6 @@
 #===============================================================================
 # Project: PipMatrixResolver
-# Generated on: 2025-11-02 01:31:12
+# Generated on: 2025-11-02 11:20:15
 # OS: WSL on Ubuntu: 24.04
 # This file is used to show full source code, cmake, read me, and file locates.
 #===============================================================================
@@ -500,16 +500,11 @@ private:
 #include <QStringList>
 #include <QByteArray>
 #include <QDebug>
+#include <QTimer>
 
 /****************************************************************
- * @section External utilities assumed present
- * These functions are declared elsewhere in your project.
+ * @brief MatrixUtility namespace.
  ***************************************************************/
-
-#include <QTableView>
-#include <QStandardItemModel>
-#include <QDebug>
-
 namespace MatrixUtility
 {
     QStringList readTextFileLines(const QString &path);
@@ -522,15 +517,6 @@ namespace MatrixUtility
 
 /****************************************************************
  * @brief Constructor.
- * @param parent Parent widget pointer.
- ***************************************************************/
-/****************************************************************
- * @brief Constructor.
- * @param parent Parent widget pointer.
- ***************************************************************/
-/****************************************************************
- * @brief Constructor.
- * @param parent Parent widget pointer.
  ***************************************************************/
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -550,14 +536,38 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    // Find the index of actionFetchRequirements in menuFile
+    QList<QAction*> actions = ui->menuFile->actions();
+    int insertIndex = -1;
+    for (int i = 0; i < actions.size(); ++i) {
+        if (actions[i] == ui->actionFetchRequirements) {
+            insertIndex = i;
+            break;
+        }
+    }
+
+    // Create the submenus
+    recentLocalMenu = new QMenu(tr("Recent Local"), this);
+    recentWebMenu = new QMenu(tr("Recent Web"), this);
+
+    // Insert them after actionFetchRequirements
+    if (insertIndex != -1)
+    {
+        ui->menuFile->insertMenu(actions[insertIndex + 1], recentLocalMenu);
+        ui->menuFile->insertMenu(actions[insertIndex + 1], recentWebMenu);
+    }
+    else
+    {
+        // Fallback: add at the end
+        ui->menuFile->addMenu(recentLocalMenu);
+        ui->menuFile->addMenu(recentWebMenu);
+    }
+
     // Bind core widgets created in Designer
     requirementsView = ui->requirementsView;
     logView = ui->logView;
     progress = ui->progressBar;
     historyWidget = ui->matrixHistoryWidget;
-
-    // Bind menus defensively
-    ensureMenusInitialized();
 
     // Attach the model once, right after setupUi
     requirementsView->setModel(requirementsModel);
@@ -590,6 +600,7 @@ MainWindow::MainWindow(QWidget *parent)
                     this, &MainWindow::saveAppSettings);
         }
     }
+    connect(ui->actionExit, &QAction::triggered, this, &MainWindow::exitApp);
 }
 
 /****************************************************************
@@ -605,51 +616,8 @@ MainWindow::~MainWindow()
  ***************************************************************/
 void MainWindow::onInitialized()
 {
-    ensureMenusInitialized();
     refreshRecentMenus();
     ensureViewScrollable();
-}
-
-/****************************************************************
- * @brief Ensure menus exist and are connected to File menu.
- ***************************************************************/
-void MainWindow::ensureMenusInitialized()
-{
-    // Rebind from Designer if available
-    if (!recentLocalMenu)
-    {
-        recentLocalMenu = ui ? ui->menuRecentLocal : nullptr;
-    }
-    if (!recentWebMenu)
-    {
-        recentWebMenu = ui ? ui->menuRecentWeb : nullptr;
-    }
-
-    // If Designer menus are missing, create them and insert under File
-    if (!recentLocalMenu)
-    {
-        recentLocalMenu = new QMenu(tr("Recent Local"), this);
-        recentLocalMenu->setObjectName(QStringLiteral("menuRecentLocal"));
-        if (ui && ui->menuFile)
-        {
-            ui->menuFile->addMenu(recentLocalMenu);
-        }
-    }
-    if (!recentWebMenu)
-    {
-        recentWebMenu = new QMenu(tr("Recent Web"), this);
-        recentWebMenu->setObjectName(QStringLiteral("menuRecentWeb"));
-        if (ui && ui->menuFile)
-        {
-            ui->menuFile->addMenu(recentWebMenu);
-        }
-    }
-
-    // Final sanity checks
-    if (!recentLocalMenu || !recentWebMenu)
-    {
-        qWarning() << "ensureMenusInitialized: menus are still null";
-    }
 }
 
 /****************************************************************
@@ -681,7 +649,6 @@ void MainWindow::ensureViewScrollable()
     requirementsView->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
     requirementsView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     requirementsView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
-
 }
 
 /****************************************************************
@@ -689,12 +656,7 @@ void MainWindow::ensureViewScrollable()
  ***************************************************************/
 void MainWindow::openLocalRequirements()
 {
-    QString path = QFileDialog::getOpenFileName(
-        this,
-        tr("Open requirements.txt"),
-        QString(),
-        tr("Text Files (*.txt)")
-        );
+    QString path = QFileDialog::getOpenFileName(this, tr("Open requirements.txt"), QString(), tr("Text Files (*.txt)"));
 
     if (path.isEmpty())
     {
@@ -730,7 +692,6 @@ void MainWindow::fetchRequirementsFromUrl()
 
 /****************************************************************
  * @brief Load requirements from a local file.
- * @param path Absolute or canonical file path.
  ***************************************************************/
 void MainWindow::loadRequirementsFromFile(const QString &path)
 {
@@ -741,11 +702,7 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
 
     if (!QFile::exists(path))
     {
-        QMessageBox::warning(
-            this,
-            tr("File missing"),
-            tr("File no longer exists:\n%1").arg(path)
-            );
+        QMessageBox::warning(this, tr("File missing"), tr("File no longer exists:\n%1").arg(path));
 
         historyRecentLocal.removeAll(path);
         refreshRecentMenus();
@@ -769,13 +726,9 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     if (requirementsModel)
     {
         requirementsModel->clear();
-        MatrixUtility::writeTableToModel(requirementsModel, lines);
+        writeTableToModel(lines);
     }
 
-    // Size columns/rows and configure scrollbars safely
-    // FIXME ensureViewScrollable();
-
-    // Enable tool actions when valid data is loaded
     applyToolsEnabled(true);
 
     historyRecentLocal.removeAll(path);
@@ -790,16 +743,11 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     refreshRecentMenus();
     saveHistory();
 
-    appendLog(
-        tr("Loaded %1 requirements from %2")
-            .arg(requirementsModel->rowCount())
-            .arg(path)
-        );
+    appendLog(tr("Loaded %1 requirements from %2").arg(requirementsModel->rowCount()).arg(path));
 }
 
 /****************************************************************
  * @brief Load requirements from a URL.
- * @param url Normalized URL string.
  ***************************************************************/
 void MainWindow::loadRequirementsFromUrl(const QString &url)
 {
@@ -841,13 +789,10 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     if (requirementsModel)
     {
         requirementsModel->clear();
-        MatrixUtility::writeTableToModel(requirementsModel, lines);
+        writeTableToModel(lines);
     }
 
-    // Size columns/rows and configure scrollbars safely
     ensureViewScrollable();
-
-    // Enable tool actions when valid data is loaded
     applyToolsEnabled(true);
 
     historyRecentWeb.removeAll(url);
@@ -862,76 +807,68 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     refreshRecentMenus();
     saveHistory();
 
-    appendLog(
-        tr("Fetched %1 requirements from URL: %2")
-            .arg(requirementsModel->rowCount())
-            .arg(url)
-        );
+    appendLog(tr("Fetched %1 requirements from URL: %2")
+                  .arg(requirementsModel->rowCount())
+                  .arg(url));
 }
 
 /****************************************************************
- * @brief Refresh recent file and URL menus, with Clear actions.
+ * @brief Refresh recent file and URL menus safely.
  ***************************************************************/
 void MainWindow::refreshRecentMenus()
 {
-    // Debug diagnostics
-    qDebug() << "[refreshRecentMenus] ui:" << (ui != nullptr);
-    qDebug() << "[refreshRecentMenus] ui->menuFile:" << (ui ? ui->menuFile != nullptr : false);
-    qDebug() << "[refreshRecentMenus] recentLocalMenu:" << (recentLocalMenu != nullptr);
-    qDebug() << "[refreshRecentMenus] recentWebMenu:" << (recentWebMenu != nullptr);
-
-    // Ensure menus exist
-    if (!recentLocalMenu)
-    {
-        qDebug() << "[refreshRecentMenus] recentWebMenu: !recentLocalMenu";
-        if (ui && ui->menuRecentLocal)
-        {
-            recentLocalMenu = ui->menuRecentLocal;
-            qDebug() << "Bound recentLocalMenu from Designer";
-        }
-        else
-        {
-            recentLocalMenu = new QMenu(tr("Recent Local"), this);
-            recentLocalMenu->setObjectName(QStringLiteral("menuRecentLocal"));
-            if (ui && ui->menuFile)
-            {
-                ui->menuFile->addMenu(recentLocalMenu);
-                qDebug() << "Created and attached new Recent Local menu";
-            }
-        }
-    }
-
-    if (!recentWebMenu)
-    {
-        if (ui && ui->menuRecentWeb)
-        {
-            recentWebMenu = ui->menuRecentWeb;
-            qDebug() << "Bound recentWebMenu from Designer";
-        }
-        else
-        {
-            recentWebMenu = new QMenu(tr("Recent Web"), this);
-            recentWebMenu->setObjectName(QStringLiteral("menuRecentWeb"));
-            if (ui && ui->menuFile)
-            {
-                ui->menuFile->addMenu(recentWebMenu);
-                qDebug() << "Created and attached new Recent Web menu";
-            }
-        }
-    }
-
-    // If still null, bail out
     if (!recentLocalMenu || !recentWebMenu)
     {
-        qWarning() << "refreshRecentMenus: menus not available, aborting";
+        qWarning() << "refreshRecentMenus: menus not available, skipping";
         return;
     }
 
-    // Now safe to clear and repopulate
-    recentWebMenu->clear();
     recentLocalMenu->clear();
+    recentWebMenu->clear();
 
-    // ... existing code to add actions ...
+    // Populate Recent Local
+    for (int i = 0; i < historyRecentLocal.size(); ++i)
+    {
+        const QString &path = historyRecentLocal.at(i);
+        QAction *act = recentLocalMenu->addAction(path);
+        connect(act, &QAction::triggered, this, [this, path]()
+        {
+            loadRequirementsFromFile(path);
+        });
+    }
+    if (!historyRecentLocal.isEmpty())
+    {
+        recentLocalMenu->addSeparator();
+        QAction *clearLocal = recentLocalMenu->addAction(tr("Clear Local History"));
+        connect(clearLocal, &QAction::triggered, this, [this]()
+        {
+            historyRecentLocal.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
+    }
+
+    // Populate Recent Web
+    for (int i = 0; i < historyRecentWeb.size(); ++i)
+    {
+        const QString &url = historyRecentWeb.at(i);
+        QAction *act = recentWebMenu->addAction(url);
+        connect(act, &QAction::triggered, this, [this, url]()
+        {
+            loadRequirementsFromUrl(url);
+        });
+    }
+    if (!historyRecentWeb.isEmpty())
+    {
+        recentWebMenu->addSeparator();
+        QAction *clearWeb = recentWebMenu->addAction(tr("Clear Web History"));
+        connect(clearWeb, &QAction::triggered, this, [this]()
+        {
+            historyRecentWeb.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
+    }
 }
 
 /****************************************************************
@@ -952,8 +889,11 @@ void MainWindow::clearAllHistory()
 void MainWindow::saveHistory()
 {
     QSettings s;
-    s.setValue("history/recentLocal", historyRecentLocal);
-    s.setValue("history/recentWeb", historyRecentWeb);
+    s.setValue("history/recentLocal", historyRecentLocal.count());
+    s.setValue("history/recentWeb", historyRecentWeb.count());
+    qDebug() << __func__ << ": Loaded local:" << historyRecentLocal;
+    qDebug() << __func__ << ": Loaded web:" << historyRecentWeb;
+
 }
 
 /****************************************************************
@@ -964,8 +904,9 @@ void MainWindow::loadHistory()
     QSettings s;
     historyRecentLocal = s.value("history/recentLocal").toStringList();
     historyRecentWeb = s.value("history/recentWeb").toStringList();
+    qDebug() << __func__ << ": Loaded local:" << historyRecentLocal.count();
+    qDebug() << __func__ << ": Loaded web:" << historyRecentWeb.count();
 
-    // Trim to current max setting
     if (maxHistoryItems != -1)
     {
         while (historyRecentLocal.size() > maxHistoryItems)
@@ -985,8 +926,6 @@ void MainWindow::loadHistory()
 void MainWindow::loadAppSettings()
 {
     QSettings settings;
-
-    // Defaults: maxItems=10, version="1.0"
     maxHistoryItems = settings.value("app/maxItems", 10).toInt();
     appVersion = settings.value("app/version", "1.0").toString();
 
@@ -1008,7 +947,6 @@ void MainWindow::saveAppSettings()
 
     statusBar()->showMessage(tr("Settings saved"), 2000);
 
-    // Re-apply trimming using new max
     if (maxHistoryItems != -1)
     {
         while (historyRecentLocal.size() > maxHistoryItems)
@@ -1027,31 +965,31 @@ void MainWindow::saveAppSettings()
 /****************************************************************
  * @brief Validate and clamp all settings to safe ranges.
  ***************************************************************/
+
 void MainWindow::validateAppSettings()
 {
-    // maxHistoryItems: -1=unlimited, 0 invalid, all others positive
+    // Clamp maxHistoryItems: -1 = unlimited, 1+ = valid, 0 not allowed
     if (maxHistoryItems == 0)
     {
-        maxHistoryItems = 10; // fallback default
+        maxHistoryItems = 10; // Default to 10 if 0
     }
     else if (maxHistoryItems < -1)
     {
-        maxHistoryItems = 1; // clamp to minimum positive
+        maxHistoryItems = 1; // Clamp to minimum valid value
     }
 
-    // appVersion: text; forbid "0" segments
-    QStringList parts = appVersion.split('.');
-    bool valid = true;
+    // Validate appVersion: must not be empty, no segment may be "0"
+    QStringList parts = appVersion.split('.', Qt::SkipEmptyParts);
+    bool valid = !appVersion.trimmed().isEmpty();
     for (int i = 0; i < parts.size(); ++i)
     {
-        const QString seg = parts.at(i).trimmed();
-        if (seg == QStringLiteral("0"))
+        if (parts.at(i).trimmed() == QLatin1String("0"))
         {
             valid = false;
             break;
         }
     }
-    if (!valid || appVersion.trimmed().isEmpty())
+    if (!valid)
     {
         appVersion = QStringLiteral("1.0");
     }
@@ -1062,9 +1000,6 @@ void MainWindow::validateAppSettings()
  ***************************************************************/
 void MainWindow::applySettingsFromUi()
 {
-    // Designer widgets:
-    // QSpinBox* ui->spinMaxItems (min -1, max INT_MAX)
-    // QLineEdit* ui->editVersion
     maxHistoryItems = ui->spinMaxItems->value();
     appVersion = ui->editVersion->text();
 }
@@ -1133,7 +1068,6 @@ void MainWindow::stopResolve()
 
 /****************************************************************
  * @brief Append a line to the log view.
- * @param line The message line to append.
  ***************************************************************/
 void MainWindow::appendLog(const QString &line)
 {
@@ -1143,7 +1077,6 @@ void MainWindow::appendLog(const QString &line)
 
 /****************************************************************
  * @brief Update progress bar.
- * @param percent The progress value (0-100).
  ***************************************************************/
 void MainWindow::updateProgress(int percent)
 {
@@ -1152,7 +1085,6 @@ void MainWindow::updateProgress(int percent)
 
 /****************************************************************
  * @brief Show compiled result message.
- * @param path The compiled output path.
  ***************************************************************/
 void MainWindow::showCompiledResult(const QString &path)
 {
@@ -1219,6 +1151,9 @@ void MainWindow::openMatrixHistory()
     ui->mainTabs->setCurrentWidget(ui->tabHistory);
 }
 
+/****************************************************************
+ * @brief apply Tools Enabled.
+ ***************************************************************/
 void MainWindow::applyToolsEnabled(bool enabled)
 {
     ui->actionCreateVenv->setEnabled(enabled);
@@ -1229,6 +1164,41 @@ void MainWindow::applyToolsEnabled(bool enabled)
     ui->actionRunBatch->setEnabled(enabled);
 }
 
+/************************************************************
+ * @brief Write requirements into a one-column model.
+ ************************************************************/
+void MainWindow::writeTableToModel(const QStringList &lines)
+{
+    if (!requirementsModel || !requirementsView) return;
+
+    requirementsModel->clear();
+    requirementsModel->setColumnCount(1);
+    requirementsModel->setHorizontalHeaderLabels({tr("requirements.txt")});
+
+    for (const QString &line : lines)
+    {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) continue;
+        auto *item = new QStandardItem(trimmed);
+        item->setEditable(false);
+        requirementsModel->appendRow(item);
+    }
+
+    // Resize columns to fit contents
+    requirementsView->resizeColumnsToContents();
+    requirementsView->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+
+    // Optionally, allow user to stretch columns interactively
+    requirementsView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+}
+
+/************************************************************
+ * @brief Exit App.
+ ************************************************************/
+void MainWindow::exitApp()
+{
+    QApplication::quit();
+}
 /************** End of MainWindow.cpp **************************/
 
 #-------------------------------------------------------------------------------
@@ -1440,6 +1410,11 @@ private slots:
      ***********************************************************/
     void onInitialized();
 
+    /************************************************************
+     * @brief Exit App.
+     ***********************************************************/
+    void exitApp();
+
 private:
     /************************************************************
      * @brief Load requirements directly from file path.
@@ -1463,6 +1438,9 @@ private:
      ***********************************************************/
     void loadHistory();
 
+    /************************************************************
+     * @brief apply Tools Enabled.
+     ***********************************************************/
     void applyToolsEnabled(bool enabled);
 
     /************************************************************
@@ -1470,10 +1448,10 @@ private:
      ***********************************************************/
     void ensureViewScrollable();
 
-    /****************************************************************
-    * @brief Ensure menus exist and are connected to File menu.
-    ***************************************************************/
-    void ensureMenusInitialized();
+    /************************************************************
+     * @brief Write requirements into a one-column model.
+     ************************************************************/
+    void writeTableToModel(const QStringList &lines);
 
 private:
     Ui::MainWindow *ui;
@@ -1693,8 +1671,6 @@ private:
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
     <addaction name="actionOpenHistory"/>
-    <addaction name="menuRecentLocal"/>
-    <addaction name="menuRecentWeb"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
@@ -1776,18 +1752,6 @@ private:
     <string>Exit</string>
    </property>
   </action>
-  <!-- FIX: Added the missing definition for menuRecentLocal -->
-  <!-- This definition was missing, causing ui->recentLocalMenu to be a nullptr -->
-  <widget class="QMenu" name="menuRecentLocal">
-   <property name="title">
-    <string>Recent Local</string>
-   </property>
-  </widget>
-  <widget class="QMenu" name="menuRecentWeb">
-   <property name="title">
-    <string>Recent Web</string>
-   </property>
-  </widget>
   <action name="actionCreateVenv">
    <property name="icon">
     <iconset resource="../PipMatrixResolverQt.qrc">
@@ -1863,6 +1827,11 @@ private:
   <action name="separator">
    <property name="separator" stdset="0">
     <bool>true</bool>
+   </property>
+  </action>
+  <action name="menuRecentLocal">
+   <property name="text">
+    <string>Recent Local</string>
    </property>
   </action>
  </widget>
@@ -2128,29 +2097,6 @@ QStringList MatrixUtility::readTextFileLines(const QString &path)
 }
 
 /************************************************************
- * @brief Write requirements into a one-column model.
- ************************************************************/
-void MatrixUtility::writeTableToModel(QStandardItemModel *model,
-                                      const QStringList &lines)
-{
-    if (!model) return;
-
-    model->clear();
-    model->setColumnCount(1);
-    model->setHorizontalHeaderLabels(
-        { QObject::tr("requirements.txt") });
-
-    for (const QString &line : lines)
-    {
-        const QString trimmed = line.trimmed();
-        if (trimmed.isEmpty()) continue;
-        auto *item = new QStandardItem(trimmed);
-        item->setEditable(false);
-        model->appendRow(item);
-    }
-}
-
-/************************************************************
  * @brief Download text from local or remote URL.
  ************************************************************/
 bool MatrixUtility::downloadText(const QString &url, QByteArray &out)
@@ -2280,12 +2226,6 @@ QString normalizeRawUrl(const QString &url);
      * @brief Read file lines, strip blanks and comments.
      ************************************************************/
 QStringList readTextFileLines(const QString &path);
-
-/************************************************************
-     * @brief Write requirements into a one-column model.
-     ************************************************************/
-void writeTableToModel(QStandardItemModel *model,
-                       const QStringList &lines);
 
 /************************************************************
      * @brief Ensure scrollbars and column sizing for a view.
@@ -2832,8 +2772,9 @@ TEST(ResolverEngineTest, BasicSanity)
 
 # Directory Structure
 #-------------------------------------------------------------------------------
-├── backup
-│   └── PipMatrixResolver-2025-11-01_22-30-16.txt
+├── .qtcreator
+│   ├── qtc-cmake-presets-IbUJIMne
+│   └── CMakeLists.txt.user
 ├── icons
 │   ├── app.svg
 │   ├── batch.svg
