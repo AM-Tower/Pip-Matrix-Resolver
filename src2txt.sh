@@ -22,12 +22,17 @@ set -euo pipefail
 IFS=$'\n\t'
 
 declare -g PROJECTNAME="Project-Source"
-declare -ga EXCLUDES=(".git" "build" "backup")
+# New declaration for the folder holding individual text file copies
+declare -g SRC_TEXT_FOLDER="../src_text"
+declare -g SRC_BACKUP_FOLDER="../backup" # New relative path for backup
+
+# Add the source text folder to the default exclusions
+declare -ga EXCLUDES=(".git" "build" "$SRC_BACKUP_FOLDER" "$SRC_TEXT_FOLDER")
 declare SHOW_OUTPUT; SHOW_OUTPUT="false";
 #
 declare OUTPUT_FILE=""
 declare SCRIPT_DIR; SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-declare BACKUP_DIR="${SCRIPT_DIR}/backup"
+# Removed BACKUP_DIR declaration as it is now defined by SRC_BACKUP_FOLDER
 #------------------------------------------------------------------------------
 # Function: show_help
 #------------------------------------------------------------------------------
@@ -76,7 +81,7 @@ OUTPUT_FILE="${OUTPUT_FILE:-${SCRIPT_DIR}/${PROJECTNAME}.txt}"
 # This must happen after argument parsing to include all user exclusions.
 #------------------------------------------------------------------------------
 declare -ga EXCLUDE_FIND_ARGS=()
-# Add the output file/directory to exclusions to prevent infinite recursion
+# Add the output file name to exclusions to prevent infinite recursion
 EXCLUDES+=("$(basename "$OUTPUT_FILE")")
 
 for exc in "${EXCLUDES[@]}"; do
@@ -130,14 +135,16 @@ system_info()
 #------------------------------------------------------------------------------
 backup_old_output()
 {
-    mkdir -p "$BACKUP_DIR"
+    # Use the new relative path for backup folder
+    mkdir -p "$SRC_BACKUP_FOLDER"
     if [[ -f "$OUTPUT_FILE" ]]
     then
         local timestamp
         timestamp="$(date +"%Y-%m-%d_%H-%M-%S")"
 
         local backup_file
-        backup_file="${BACKUP_DIR}/$(basename "${OUTPUT_FILE%.txt}")-${timestamp}.txt"
+        # Use the new variable for the path
+        backup_file="${SRC_BACKUP_FOLDER}/$(basename "${OUTPUT_FILE%.txt}")-${timestamp}.txt"
 
         cp "$OUTPUT_FILE" "$backup_file"
         echo "# Backup created: $backup_file"
@@ -243,6 +250,9 @@ collect_files()
 #------------------------------------------------------------------------------
 write_output()
 {
+    # Create the folder for individual file copies
+    mkdir -p "$SRC_TEXT_FOLDER"
+
     {
         echo "#==============================================================================="
         echo "# Project: $PROJECTNAME"
@@ -255,6 +265,12 @@ write_output()
         for f in "${files[@]}"
         do
             [[ -f "$f" ]] || continue
+
+            # Copy the file to the new folder with the .txt suffix
+            local target_file; target_file="${SRC_TEXT_FOLDER}/$(basename "$f").txt"
+            cp "$f" "$target_file"
+
+            # Append content to the main output file
             echo "#-------------------------------------------------------------------------------"
             echo "# File: ${f#./}"
             echo "#-------------------------------------------------------------------------------"
@@ -274,6 +290,7 @@ backup_old_output
 write_output
 
 echo "Output written to: $OUTPUT_FILE"
+echo "Individual file copies written to: $SRC_TEXT_FOLDER" # Added info message
 if [ "$SHOW_OUTPUT" = "true" ]; then
     # Clear the screen (if you had this before)
     clear

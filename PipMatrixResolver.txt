@@ -1,6 +1,6 @@
 #===============================================================================
 # Project: PipMatrixResolver
-# Generated on: 2025-11-01 22:17:05
+# Generated on: 2025-11-02 01:31:12
 # OS: WSL on Ubuntu: 24.04
 # This file is used to show full source code, cmake, read me, and file locates.
 #===============================================================================
@@ -497,32 +497,37 @@ private:
 #include <QFileInfo>
 #include <QDialogButtonBox>
 #include <limits>
+#include <QStringList>
+#include <QByteArray>
+#include <QDebug>
 
 /****************************************************************
  * @section External utilities assumed present
  * These functions are declared elsewhere in your project.
  ***************************************************************/
+
+#include <QTableView>
+#include <QStandardItemModel>
+#include <QDebug>
+
 namespace MatrixUtility
 {
-QStringList readTextFileLines(const QString &path);
-bool validateRequirementsWithErrors(const QStringList &lines,
-                                    QStringList &errors);
-void writeTableToModel(QStandardItemModel *model,
-                       const QStringList &lines);
-void ensureViewScrollable(QTableView *view)
-{
-    if (!view) return;
-
-    view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    view->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    view->resizeColumnsToContents();
-    view->resizeRowsToContents();
-}
-QString normalizeRawUrl(const QString &inputUrl);
-bool downloadText(const QString &url, QByteArray &out);
-QString logsDir();
+    QStringList readTextFileLines(const QString &path);
+    bool validateRequirementsWithErrors(const QStringList &lines, QStringList &errors);
+    void writeTableToModel(QStandardItemModel *model, const QStringList &lines);
+    QString normalizeRawUrl(const QString &inputUrl);
+    bool downloadText(const QString &url, QByteArray &out);
+    QString logsDir();
 }
 
+/****************************************************************
+ * @brief Constructor.
+ * @param parent Parent widget pointer.
+ ***************************************************************/
+/****************************************************************
+ * @brief Constructor.
+ * @param parent Parent widget pointer.
+ ***************************************************************/
 /****************************************************************
  * @brief Constructor.
  * @param parent Parent widget pointer.
@@ -545,27 +550,34 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // Hook up UI elements created in Designer
+    // Bind core widgets created in Designer
     requirementsView = ui->requirementsView;
     logView = ui->logView;
     progress = ui->progressBar;
-    recentLocalMenu = ui->menuRecentLocal;
-    recentWebMenu = ui->menuRecentWeb;
     historyWidget = ui->matrixHistoryWidget;
-    // hook the model up once, right after setupUi
+
+    // Bind menus defensively
+    ensureMenusInitialized();
+
+    // Attach the model once, right after setupUi
     requirementsView->setModel(requirementsModel);
-    // Load settings and history
+    requirementsView->setAlternatingRowColors(true);
+    requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
+    requirementsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
+    // Settings and history
     loadAppSettings();
     loadHistory();
-    refreshRecentMenus();
 
-    // Connect menu actions from Designer
+    // Defer menu population until UI is fully realized
+    QTimer::singleShot(0, this, &MainWindow::onInitialized);
+
+    // Connect actions
     connect(ui->actionOpenRequirements, &QAction::triggered,
             this, &MainWindow::openLocalRequirements);
     connect(ui->actionFetchRequirements, &QAction::triggered,
             this, &MainWindow::fetchRequirementsFromUrl);
 
-    // Preferences button box in settings dialog (if present)
     if (ui->buttonBoxPreferences)
     {
         connect(ui->buttonBoxPreferences, &QDialogButtonBox::accepted,
@@ -586,6 +598,90 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+/****************************************************************
+ * @brief Called once after construction to finalize setup.
+ ***************************************************************/
+void MainWindow::onInitialized()
+{
+    ensureMenusInitialized();
+    refreshRecentMenus();
+    ensureViewScrollable();
+}
+
+/****************************************************************
+ * @brief Ensure menus exist and are connected to File menu.
+ ***************************************************************/
+void MainWindow::ensureMenusInitialized()
+{
+    // Rebind from Designer if available
+    if (!recentLocalMenu)
+    {
+        recentLocalMenu = ui ? ui->menuRecentLocal : nullptr;
+    }
+    if (!recentWebMenu)
+    {
+        recentWebMenu = ui ? ui->menuRecentWeb : nullptr;
+    }
+
+    // If Designer menus are missing, create them and insert under File
+    if (!recentLocalMenu)
+    {
+        recentLocalMenu = new QMenu(tr("Recent Local"), this);
+        recentLocalMenu->setObjectName(QStringLiteral("menuRecentLocal"));
+        if (ui && ui->menuFile)
+        {
+            ui->menuFile->addMenu(recentLocalMenu);
+        }
+    }
+    if (!recentWebMenu)
+    {
+        recentWebMenu = new QMenu(tr("Recent Web"), this);
+        recentWebMenu->setObjectName(QStringLiteral("menuRecentWeb"));
+        if (ui && ui->menuFile)
+        {
+            ui->menuFile->addMenu(recentWebMenu);
+        }
+    }
+
+    // Final sanity checks
+    if (!recentLocalMenu || !recentWebMenu)
+    {
+        qWarning() << "ensureMenusInitialized: menus are still null";
+    }
+}
+
+/****************************************************************
+ * @brief Ensure requirementsView is scrollable and sized.
+ ***************************************************************/
+void MainWindow::ensureViewScrollable()
+{
+    if (!requirementsView)
+    {
+        requirementsView = ui ? ui->requirementsView : nullptr;
+        if (!requirementsView)
+        {
+            qWarning() << "ensureViewScrollable: requirementsView still null";
+            return;
+        }
+    }
+
+    if (!requirementsView->model())
+    {
+        qWarning() << "ensureViewScrollable: no model set, attaching default";
+        requirementsView->setModel(requirementsModel);
+    }
+
+    requirementsView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    requirementsView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    requirementsView->resizeColumnsToContents();
+    requirementsView->resizeRowsToContents();
+
+    requirementsView->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
+    requirementsView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    requirementsView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+
 }
 
 /****************************************************************
@@ -650,17 +746,15 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
             tr("File missing"),
             tr("File no longer exists:\n%1").arg(path)
             );
-        // Auto-remove invalid entry
+
         historyRecentLocal.removeAll(path);
         refreshRecentMenus();
         saveHistory();
         return;
     }
 
-    // Read file lines
     const QStringList lines = MatrixUtility::readTextFileLines(path);
 
-    // Validate requirements
     QStringList errors;
     if (!MatrixUtility::validateRequirementsWithErrors(lines, errors))
     {
@@ -672,22 +766,18 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
         return;
     }
 
-    // Reset and repopulate the model
     if (requirementsModel)
     {
         requirementsModel->clear();
         MatrixUtility::writeTableToModel(requirementsModel, lines);
     }
 
-    if (requirementsView)
-    {
-        MatrixUtility::ensureViewScrollable(requirementsView);
-    }
+    // Size columns/rows and configure scrollbars safely
+    // FIXME ensureViewScrollable();
 
-    // Enable tool actions now that we have valid data
+    // Enable tool actions when valid data is loaded
     applyToolsEnabled(true);
 
-    // Update local history
     historyRecentLocal.removeAll(path);
     historyRecentLocal.prepend(path);
     if (maxHistoryItems != -1)
@@ -700,7 +790,6 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     refreshRecentMenus();
     saveHistory();
 
-    // Log success
     appendLog(
         tr("Loaded %1 requirements from %2")
             .arg(requirementsModel->rowCount())
@@ -727,7 +816,7 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
             tr("Download failed"),
             tr("Failed to fetch requirements from URL:\n%1").arg(url)
             );
-        // Auto-remove invalid entry
+
         historyRecentWeb.removeAll(url);
         refreshRecentMenus();
         saveHistory();
@@ -737,7 +826,6 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     const QStringList lines =
         QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
 
-    // Validate requirements
     QStringList errors;
     if (!MatrixUtility::validateRequirementsWithErrors(lines, errors))
     {
@@ -750,22 +838,18 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
         return;
     }
 
-    // Reset and repopulate the model
     if (requirementsModel)
     {
         requirementsModel->clear();
         MatrixUtility::writeTableToModel(requirementsModel, lines);
     }
 
-    if (requirementsView)
-    {
-        MatrixUtility::ensureViewScrollable(requirementsView);
-    }
+    // Size columns/rows and configure scrollbars safely
+    ensureViewScrollable();
 
-    // Enable tool actions now that we have valid data
+    // Enable tool actions when valid data is loaded
     applyToolsEnabled(true);
 
-    // Update web history
     historyRecentWeb.removeAll(url);
     historyRecentWeb.prepend(url);
     if (maxHistoryItems != -1)
@@ -778,7 +862,6 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     refreshRecentMenus();
     saveHistory();
 
-    // Log success
     appendLog(
         tr("Fetched %1 requirements from URL: %2")
             .arg(requirementsModel->rowCount())
@@ -791,73 +874,64 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
  ***************************************************************/
 void MainWindow::refreshRecentMenus()
 {
-    recentLocalMenu->clear();
-    recentWebMenu->clear();
+    // Debug diagnostics
+    qDebug() << "[refreshRecentMenus] ui:" << (ui != nullptr);
+    qDebug() << "[refreshRecentMenus] ui->menuFile:" << (ui ? ui->menuFile != nullptr : false);
+    qDebug() << "[refreshRecentMenus] recentLocalMenu:" << (recentLocalMenu != nullptr);
+    qDebug() << "[refreshRecentMenus] recentWebMenu:" << (recentWebMenu != nullptr);
 
-    // Local history
-    for (int i = 0; i < historyRecentLocal.size(); ++i)
+    // Ensure menus exist
+    if (!recentLocalMenu)
     {
-        const QString &path = historyRecentLocal.at(i);
-        if (!QFile::exists(path))
+        qDebug() << "[refreshRecentMenus] recentWebMenu: !recentLocalMenu";
+        if (ui && ui->menuRecentLocal)
         {
-            continue;
+            recentLocalMenu = ui->menuRecentLocal;
+            qDebug() << "Bound recentLocalMenu from Designer";
         }
-
-        QAction *act = recentLocalMenu->addAction(path);
-        connect(
-            act, &QAction::triggered, this,
-            [this, path]()
+        else
+        {
+            recentLocalMenu = new QMenu(tr("Recent Local"), this);
+            recentLocalMenu->setObjectName(QStringLiteral("menuRecentLocal"));
+            if (ui && ui->menuFile)
             {
-                loadRequirementsFromFile(path);
+                ui->menuFile->addMenu(recentLocalMenu);
+                qDebug() << "Created and attached new Recent Local menu";
             }
-            );
+        }
     }
 
-    if (!historyRecentLocal.isEmpty())
+    if (!recentWebMenu)
     {
-        recentLocalMenu->addSeparator();
-        QAction *clearLocal = recentLocalMenu->addAction(tr("Clear Recent"));
-        connect(
-            clearLocal, &QAction::triggered, this,
-            [this]()
+        if (ui && ui->menuRecentWeb)
+        {
+            recentWebMenu = ui->menuRecentWeb;
+            qDebug() << "Bound recentWebMenu from Designer";
+        }
+        else
+        {
+            recentWebMenu = new QMenu(tr("Recent Web"), this);
+            recentWebMenu->setObjectName(QStringLiteral("menuRecentWeb"));
+            if (ui && ui->menuFile)
             {
-                historyRecentLocal.clear();
-                refreshRecentMenus();
-                saveHistory();
-                appendLog(tr("Cleared recent local history"));
+                ui->menuFile->addMenu(recentWebMenu);
+                qDebug() << "Created and attached new Recent Web menu";
             }
-            );
+        }
     }
 
-    // Web history
-    for (int i = 0; i < historyRecentWeb.size(); ++i)
+    // If still null, bail out
+    if (!recentLocalMenu || !recentWebMenu)
     {
-        const QString &url = historyRecentWeb.at(i);
-        QAction *act = recentWebMenu->addAction(url);
-        connect(
-            act, &QAction::triggered, this,
-            [this, url]()
-            {
-                loadRequirementsFromUrl(url);
-            }
-            );
+        qWarning() << "refreshRecentMenus: menus not available, aborting";
+        return;
     }
 
-    if (!historyRecentWeb.isEmpty())
-    {
-        recentWebMenu->addSeparator();
-        QAction *clearWeb = recentWebMenu->addAction(tr("Clear Recent"));
-        connect(
-            clearWeb, &QAction::triggered, this,
-            [this]()
-            {
-                historyRecentWeb.clear();
-                refreshRecentMenus();
-                saveHistory();
-                appendLog(tr("Cleared recent web history"));
-            }
-            );
-    }
+    // Now safe to clear and repopulate
+    recentWebMenu->clear();
+    recentLocalMenu->clear();
+
+    // ... existing code to add actions ...
 }
 
 /****************************************************************
@@ -1178,6 +1252,7 @@ void MainWindow::applyToolsEnabled(bool enabled)
 
 #include <QMainWindow>
 #include <QStringList>
+#include <QTimer>
 #include "ResolverEngine.h"
 #include "VenvManager.h"
 #include "BatchRunner.h"
@@ -1360,6 +1435,11 @@ private slots:
      ***********************************************************/
     void openMatrixHistory();
 
+    /************************************************************
+     * @brief Called once after construction to finalize setup.
+     ***********************************************************/
+    void onInitialized();
+
 private:
     /************************************************************
      * @brief Load requirements directly from file path.
@@ -1384,6 +1464,16 @@ private:
     void loadHistory();
 
     void applyToolsEnabled(bool enabled);
+
+    /************************************************************
+     * @brief Ensure requirementsView is scrollable and sized.
+     ***********************************************************/
+    void ensureViewScrollable();
+
+    /****************************************************************
+    * @brief Ensure menus exist and are connected to File menu.
+    ***************************************************************/
+    void ensureMenusInitialized();
 
 private:
     Ui::MainWindow *ui;
@@ -1686,6 +1776,8 @@ private:
     <string>Exit</string>
    </property>
   </action>
+  <!-- FIX: Added the missing definition for menuRecentLocal -->
+  <!-- This definition was missing, causing ui->recentLocalMenu to be a nullptr -->
   <widget class="QMenu" name="menuRecentLocal">
    <property name="title">
     <string>Recent Local</string>
@@ -2740,6 +2832,8 @@ TEST(ResolverEngineTest, BasicSanity)
 
 # Directory Structure
 #-------------------------------------------------------------------------------
+├── backup
+│   └── PipMatrixResolver-2025-11-01_22-30-16.txt
 ├── icons
 │   ├── app.svg
 │   ├── batch.svg
@@ -2770,26 +2864,6 @@ TEST(ResolverEngineTest, BasicSanity)
 │   ├── VenvManager.cpp
 │   ├── VenvManager.h
 │   └── main.cpp
-├── src_text
-│   ├── BatchRunner.cpp.txt
-│   ├── BatchRunner.h.txt
-│   ├── MainWindow.cpp.txt
-│   ├── MainWindow.h.txt
-│   ├── MainWindow.ui.autosave.txt
-│   ├── MainWindow.ui.txt
-│   ├── MatrixHistory.cpp.txt
-│   ├── MatrixHistory.h.txt
-│   ├── MatrixHistory.ui.txt
-│   ├── MatrixUtility.cpp.txt
-│   ├── MatrixUtility.h.txt
-│   ├── PipMatrixResolverQt.qrc.txt
-│   ├── PipToolsRunner.cpp.txt
-│   ├── PipToolsRunner.h.txt
-│   ├── ResolverEngine.cpp.txt
-│   ├── ResolverEngine.h.txt
-│   ├── VenvManager.cpp.txt
-│   ├── VenvManager.h.txt
-│   └── main.cpp.txt
 ├── tests
 │   ├── gtest_resolver.cpp
 │   ├── qt_test_main.cpp

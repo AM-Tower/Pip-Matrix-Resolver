@@ -28,7 +28,7 @@
         <item>
          <widget class="QSplitter" name="splitter">
           <property name="orientation">
-           <enum>Qt::Orientation::Horizontal</enum>
+           <enum>Qt::Horizontal</enum>
           </property>
           <widget class="QTableView" name="requirementsView"/>
           <widget class="QTableView" name="matrixView"/>
@@ -37,7 +37,7 @@
         <item>
          <widget class="QSplitter" name="bottomSplitter">
           <property name="orientation">
-           <enum>Qt::Orientation::Horizontal</enum>
+           <enum>Qt::Horizontal</enum>
           </property>
           <widget class="QPlainTextEdit" name="logView">
            <property name="readOnly">
@@ -129,7 +129,7 @@
           <item row="4" column="1">
            <widget class="QLineEdit" name="editVersion">
             <property name="toolTip">
-             <string>Version string, no segment may be &quot;0&quot;</string>
+             <string>Version string, no segment may be "0"</string>
             </property>
             <property name="text">
              <string>1.0</string>
@@ -155,7 +155,7 @@
         <item>
          <widget class="QDialogButtonBox" name="buttonBoxPreferences">
           <property name="standardButtons">
-           <set>QDialogButtonBox::StandardButton::Apply|QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+           <set>QDialogButtonBox::Apply|QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
           </property>
          </widget>
         </item>
@@ -165,6 +165,8 @@
     </item>
    </layout>
   </widget>
+
+  <!-- Menu Bar and Menus -->
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
@@ -185,6 +187,16 @@
     <addaction name="menuRecentWeb"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuRecentLocal">
+    <property name="title">
+     <string>Recent Local</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuRecentWeb">
+    <property name="title">
+     <string>Recent Web</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -214,6 +226,7 @@
    <addaction name="menuBatch"/>
    <addaction name="menuHelp"/>
   </widget>
+
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QToolBar" name="mainToolBar">
    <property name="windowTitle">
@@ -236,9 +249,11 @@
    <addaction name="actionAbout"/>
    <addaction name="actionViewReadme"/>
   </widget>
+
+  <!-- Actions with icons (no resource attribute) -->
   <action name="actionOpenRequirements">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/open.svg</normaloff>:/icons/icons/open.svg</iconset>
    </property>
    <property name="text">
@@ -247,7 +262,7 @@
   </action>
   <action name="actionFetchRequirements">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/url.svg</normaloff>:/icons/icons/url.svg</iconset>
    </property>
    <property name="text">
@@ -264,19 +279,9 @@
     <string>Exit</string>
    </property>
   </action>
-  <widget class="QMenu" name="menuRecentLocal">
-   <property name="title">
-    <string>Recent Local</string>
-   </property>
-  </widget>
-  <widget class="QMenu" name="menuRecentWeb">
-   <property name="title">
-    <string>Recent Web</string>
-   </property>
-  </widget>
   <action name="actionCreateVenv">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/venv.svg</normaloff>:/icons/icons/venv.svg</iconset>
    </property>
    <property name="text">
@@ -285,7 +290,7 @@
   </action>
   <action name="actionResolveMatrix">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/resolve.svg</normaloff>:/icons/icons/resolve.svg</iconset>
    </property>
    <property name="text">
@@ -294,7 +299,7 @@
   </action>
   <action name="actionPause">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/pause.svg</normaloff>:/icons/icons/pause.svg</iconset>
    </property>
    <property name="text">
@@ -303,7 +308,7 @@
   </action>
   <action name="actionResume">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/resume.svg</normaloff>:/icons/icons/resume.svg</iconset>
    </property>
    <property name="text">
@@ -312,7 +317,7 @@
   </action>
   <action name="actionStop">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/stop.svg</normaloff>:/icons/icons/stop.svg</iconset>
    </property>
    <property name="text">
@@ -321,7 +326,7 @@
   </action>
   <action name="actionRunBatch">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/batch.svg</normaloff>:/icons/icons/batch.svg</iconset>
    </property>
    <property name="text">
@@ -330,7 +335,7 @@
   </action>
   <action name="actionAbout">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/info.svg</normaloff>:/icons/icons/info.svg</iconset>
    </property>
    <property name="text">
@@ -339,7 +344,7 @@
   </action>
   <action name="actionViewReadme">
    <property name="icon">
-    <iconset resource="../PipMatrixResolverQt.qrc">
+    <iconset>
      <normaloff>:/icons/icons/readme.svg</normaloff>:/icons/icons/readme.svg</iconset>
    </property>
    <property name="text">
@@ -352,6 +357,7 @@
    </property>
   </action>
  </widget>
+
  <customwidgets>
   <customwidget>
    <class>MatrixHistory</class>
@@ -360,6 +366,8 @@
    <container>1</container>
   </customwidget>
  </customwidgets>
+
+ <!-- Single resource block at the end -->
  <resources>
   <include location="../PipMatrixResolverQt.qrc"/>
  </resources>

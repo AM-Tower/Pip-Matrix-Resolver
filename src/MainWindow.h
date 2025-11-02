@@ -16,6 +16,7 @@
 
 #include <QMainWindow>
 #include <QStringList>
+#include <QTimer>
 #include "ResolverEngine.h"
 #include "VenvManager.h"
 #include "BatchRunner.h"
@@ -198,6 +199,11 @@ private slots:
      ***********************************************************/
     void openMatrixHistory();
 
+    /************************************************************
+     * @brief Called once after construction to finalize setup.
+     ***********************************************************/
+    void onInitialized();
+
 private:
     /************************************************************
      * @brief Load requirements directly from file path.
@@ -222,6 +228,16 @@ private:
     void loadHistory();
 
     void applyToolsEnabled(bool enabled);
+
+    /************************************************************
+     * @brief Ensure requirementsView is scrollable and sized.
+     ***********************************************************/
+    void ensureViewScrollable();
+
+    /****************************************************************
+    * @brief Ensure menus exist and are connected to File menu.
+    ***************************************************************/
+    void ensureMenusInitialized();
 
 private:
     Ui::MainWindow *ui;
