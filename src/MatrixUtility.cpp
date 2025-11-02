@@ -1,12 +1,17 @@
-/******************************************************************
- * File: MatrixUtility.cpp
- * Author: Jeffrey Scott Flesher, Microsoft Copilot
- * Description:
- *   Implements utility functions for PipMatrixResolverQt.
+/****************************************************************
+ * @file MatrixUtility.cpp
+ * @brief Implementation of utility functions for
+ *        PipMatrixResolverQt.
  *
- * Version: 0.1
- * Date:    2025-10-31
- ******************************************************************/
+ * @author Jeffrey
+ * @version 0.4
+ * @date    2025-11-01
+ * @section License Unlicensed, MIT, or any.
+ * @section DESCRIPTION
+ * Implements helpers for reading requirements files, writing
+ * them into models, validating entries, ensuring view
+ * scrollability, and downloading text resources.
+ ***************************************************************/
 
 #include "MatrixUtility.h"
 
@@ -21,37 +26,48 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QEventLoop>
+#include <QRegularExpression>
+#include <QTableView>
+#include <QDebug>
 
-/******************************************************************
- * logsDir
- ******************************************************************/
+/************************************************************
+ * @brief Return logs directory, create if missing.
+ ************************************************************/
 QString MatrixUtility::logsDir()
 {
     QDir dir("logs");
-    if (!dir.exists()) dir.mkpath(".");
+    if (!dir.exists())
+    {
+        dir.mkpath(".");
+    }
     return dir.absolutePath();
 }
 
-/******************************************************************
- * historyDir
- ******************************************************************/
+/************************************************************
+ * @brief Return history directory, create if missing.
+ ************************************************************/
 QString MatrixUtility::historyDir()
 {
     QDir dir("requirement-history");
-    if (!dir.exists()) dir.mkpath(".");
+    if (!dir.exists())
+    {
+        dir.mkpath(".");
+    }
     return dir.absolutePath();
 }
 
-/******************************************************************
- * normalizeRawUrl
- ******************************************************************/
-QString MatrixUtility::normalizeRawUrl(const QString& url)
+/************************************************************
+ * @brief Normalize GitHub blob URLs to raw URLs.
+ ************************************************************/
+QString MatrixUtility::normalizeRawUrl(const QString &url)
 {
     const QUrl u(url);
     const QString host = u.host().toLower();
-    if (host == "github.com") {
+    if (host == "github.com")
+    {
         const QStringList parts = u.path().split('/', Qt::SkipEmptyParts);
-        if (parts.size() >= 5 && parts[2] == "blob") {
+        if (parts.size() >= 5 && parts[2] == "blob")
+        {
             const QString owner = parts[0];
             const QString repo  = parts[1];
             const QString branch = parts[3];
@@ -60,64 +76,57 @@ QString MatrixUtility::normalizeRawUrl(const QString& url)
                 .arg(owner, repo, branch, rest);
         }
     }
-    if (host == "raw.githubusercontent.com") {
-        return url;
-    }
     return url;
 }
 
-/******************************************************************
- * readTextFileLines
- ******************************************************************/
-QStringList MatrixUtility::readTextFileLines(const QString& path)
+/************************************************************
+ * @brief Read file lines, strip blanks and comments.
+ ************************************************************/
+QStringList MatrixUtility::readTextFileLines(const QString &path)
 {
     QStringList lines;
     QFile f(path);
-    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        while (!f.atEnd()) {
-            lines << QString::fromUtf8(f.readLine()).trimmed();
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        while (!f.atEnd())
+        {
+            QString line = QString::fromUtf8(f.readLine()).trimmed();
+            if (line.isEmpty()) continue;
+            if (line.startsWith('#')) continue;
+            lines << line;
         }
         f.close();
     }
     return lines;
 }
 
-/******************************************************************
- * writeTableToModel
- ******************************************************************/
-void MatrixUtility::writeTableToModel(QStandardItemModel* model,
-                                      const QStringList& lines)
+/************************************************************
+ * @brief Write requirements into a one-column model.
+ ************************************************************/
+void MatrixUtility::writeTableToModel(QStandardItemModel *model,
+                                      const QStringList &lines)
 {
     if (!model) return;
+
     model->clear();
     model->setColumnCount(1);
-    model->setHorizontalHeaderLabels({ QObject::tr("requirements.txt") });
-    for (int i = 0; i < lines.size(); ++i) {
-        auto* item = new QStandardItem(lines[i]);
+    model->setHorizontalHeaderLabels(
+        { QObject::tr("requirements.txt") });
+
+    for (const QString &line : lines)
+    {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) continue;
+        auto *item = new QStandardItem(trimmed);
         item->setEditable(false);
-        model->setItem(i, 0, item);
+        model->appendRow(item);
     }
 }
 
-/******************************************************************
- * ensureViewScrollable
- ******************************************************************/
-void MatrixUtility::ensureViewScrollable(QTableView *view)
-{
-    Q_ASSERT(view);
-    if (!view || view->parent() == nullptr) {
-        qWarning() << "ensureViewScrollable called with invalid view";
-        return;
-    }
-    view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    view->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    view->resizeColumnsToContents();
-}
-
-/******************************************************************
- * downloadText
- ******************************************************************/
-bool MatrixUtility::downloadText(const QString& url, QByteArray& out)
+/************************************************************
+ * @brief Download text from local or remote URL.
+ ************************************************************/
+bool MatrixUtility::downloadText(const QString &url, QByteArray &out)
 {
     const QUrl u(url);
     if (u.isLocalFile() || QFileInfo::exists(url))
@@ -135,8 +144,9 @@ bool MatrixUtility::downloadText(const QString& url, QByteArray& out)
     QNetworkAccessManager mgr;
     QNetworkRequest req{ QUrl(url) };
     QEventLoop loop;
-    QNetworkReply* reply = mgr.get(req);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QNetworkReply *reply = mgr.get(req);
+    QObject::connect(reply, &QNetworkReply::finished,
+                     &loop, &QEventLoop::quit);
     loop.exec();
     if (reply->error() == QNetworkReply::NoError)
     {
@@ -144,11 +154,54 @@ bool MatrixUtility::downloadText(const QString& url, QByteArray& out)
         reply->deleteLater();
         return true;
     }
-    else
-    {
-        reply->deleteLater();
-        return false;
-    }
+    reply->deleteLater();
+    return false;
 }
 
-/************** End of File.cpp **************/
+/************************************************************
+ * @brief Validate requirements quickly.
+ ************************************************************/
+bool MatrixUtility::validateRequirements(const QStringList &lines)
+{
+    QStringList errors;
+    return validateRequirementsWithErrors(lines, errors);
+}
+
+/************************************************************
+ * @brief Validate with detailed error reporting.
+ ************************************************************/
+bool MatrixUtility::validateRequirementsWithErrors(
+    const QStringList &lines,
+    QStringList &errors)
+{
+    errors.clear();
+    if (lines.isEmpty())
+    {
+        errors << "Empty input: no lines to validate.";
+        return false;
+    }
+
+    static const QRegularExpression re(R"(^([A-Za-z0-9_.-]+)(\[[A-Za-z0-9_.\-,\s]+\])?\s*(?:([=><!~]{1,2})\s*([^\s#;]+))?(?:\s*;[^#]+)?$)");
+
+    bool anyMeaningful = false;
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        const QString raw = lines.at(i);
+        const QString trimmed = raw.trimmed();
+        if (trimmed.isEmpty() || trimmed.startsWith('#')) continue;
+        anyMeaningful = true;
+        if (!re.match(trimmed).hasMatch())
+        {
+            errors << QString("Line %1 failed: \"%2\"")
+            .arg(i + 1).arg(raw);
+        }
+    }
+    if (!anyMeaningful)
+    {
+        errors << "No meaningful requirement lines found.";
+        return false;
+    }
+    return errors.isEmpty();
+}
+
+/************** End of MatrixUtility.cpp *************************/

@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="mainTabs">
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="tabMain">
        <attribute name="title">
@@ -96,6 +96,46 @@
           <item row="2" column="1">
            <widget class="QLineEdit" name="pipToolsVersionEdit"/>
           </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="labelMaxItems">
+            <property name="text">
+             <string>Maximum number of items:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QSpinBox" name="spinMaxItems">
+            <property name="toolTip">
+             <string>-1 = unlimited, 0 not allowed, ≥1 valid</string>
+            </property>
+            <property name="minimum">
+             <number>-1</number>
+            </property>
+            <property name="maximum">
+             <number>2147483647</number>
+            </property>
+            <property name="value">
+             <number>10</number>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="labelAppVersion">
+            <property name="text">
+             <string>App version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QLineEdit" name="editVersion">
+            <property name="toolTip">
+             <string>Version string, no segment may be &quot;0&quot;</string>
+            </property>
+            <property name="text">
+             <string>1.0</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
         <item>
@@ -109,6 +149,13 @@
          <widget class="QPushButton" name="restoreDefaultsButton">
           <property name="text">
            <string>Restore Defaults</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDialogButtonBox" name="buttonBoxPreferences">
+          <property name="standardButtons">
+           <set>QDialogButtonBox::StandardButton::Apply|QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
           </property>
          </widget>
         </item>
@@ -133,27 +180,12 @@
     </property>
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
-
-    <!-- Added recent submenus -->
-    <addaction name="recentLocalMenu"/>
-    <addaction name="recentWebMenu"/>
-
+    <addaction name="actionOpenHistory"/>
+    <addaction name="menuRecentLocal"/>
+    <addaction name="menuRecentWeb"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
-
-   <!-- Definitions for recent submenus -->
-   <widget class="QMenu" name="recentLocalMenu">
-    <property name="title">
-     <string>Recent local files</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="recentWebMenu">
-    <property name="title">
-     <string>Recent web URLs</string>
-    </property>
-   </widget>
-
    <widget class="QMenu" name="menuTools">
     <property name="title">
      <string>&amp;Tools</string>
@@ -222,11 +254,26 @@
     <string>Fetch requirements from URL...</string>
    </property>
   </action>
+  <action name="actionOpenHistory">
+   <property name="text">
+    <string>Open History</string>
+   </property>
+  </action>
   <action name="actionExit">
    <property name="text">
     <string>Exit</string>
    </property>
   </action>
+  <widget class="QMenu" name="menuRecentLocal">
+   <property name="title">
+    <string>Recent Local</string>
+   </property>
+  </widget>
+  <widget class="QMenu" name="menuRecentWeb">
+   <property name="title">
+    <string>Recent Web</string>
+   </property>
+  </widget>
   <action name="actionCreateVenv">
    <property name="icon">
     <iconset resource="../PipMatrixResolverQt.qrc">
@@ -278,7 +325,7 @@
      <normaloff>:/icons/icons/batch.svg</normaloff>:/icons/icons/batch.svg</iconset>
    </property>
    <property name="text">
-    <string>Run batch conversion to mp4</string>
+    <string>Run batch</string>
    </property>
   </action>
   <action name="actionAbout">
@@ -297,6 +344,11 @@
    </property>
    <property name="text">
     <string>View README</string>
+   </property>
+  </action>
+  <action name="separator">
+   <property name="separator" stdset="0">
+    <bool>true</bool>
    </property>
   </action>
  </widget>

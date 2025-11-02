@@ -8,18 +8,6 @@
 
 int main(int argc, char *argv[])
 {
-    if (true)
-    {
-        QApplication app(argc, argv);
-        MainWindow w;
-
-        w.addDummyHistory();   // safe, public call
-
-        w.show();
-        return app.exec();
-    }
-    else
-    {
         QApplication theApplication(argc, argv);
 
         // Register compiled resources
@@ -36,10 +24,12 @@ int main(int argc, char *argv[])
 
         // Translation loading
         const QString languageCode = QLocale::system().name().split('_').first();
-        auto loadTranslator = [&](const QString &baseName) -> bool {
+        auto loadTranslator = [&](const QString &baseName) -> bool
+        {
             QTranslator *tr = new QTranslator(&theApplication);
             const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
-            if (tr->load(qmFile)) {
+            if (tr->load(qmFile))
+            {
                 theApplication.installTranslator(tr);
                 qDebug() << "Loaded translation:" << qmFile;
                 return true;
@@ -55,6 +45,4 @@ int main(int argc, char *argv[])
         MainWindow w;
         w.show();
         return theApplication.exec();
-
-    }
 }

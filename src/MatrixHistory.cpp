@@ -1,235 +1,72 @@
-/******************************************************************
- * File: MatrixHistory.cpp
- * Author: Jeffrey Scott Flesher, Microsoft Copilot
- * Description:
- *   Implements MatrixHistory with tabbed UI for Local and Web
- *   requirements history. Provides import, clear, and settings.
+/****************************************************************
+ * @file MatrixHistory.cpp
+ * @brief Implements the MatrixHistory widget for
+ *        PipMatrixResolverQt.
  *
- * Version: 0.2
- * Date:    2025-10-31
- ******************************************************************/
+ * @author Jeffrey
+ * @version 0.6
+ * @date    2025-11-01
+ * @section License Unlicensed, MIT, or any.
+ * @section DESCRIPTION
+ * Provides a widget to display and manage recent requirements
+ * history (local and web). Emits signals when history changes.
+ ***************************************************************/
 
 #include "MatrixHistory.h"
 
-#include <QTabWidget>
-#include <QTableView>
-#include <QPlainTextEdit>
+#include <QListWidget>
 #include <QVBoxLayout>
-#include <QPushButton>
-#include <QSpinBox>
-#include <QHeaderView>
-#include <QSettings>
-#include <QStandardItemModel>
-#include <QFile>
-#include <utility>   // for std::as_const
 
-/******************************************************************
- * Constructor
- ******************************************************************/
+/****************************************************************
+ * @brief Constructor.
+ ***************************************************************/
 MatrixHistory::MatrixHistory(QWidget *parent)
     : QWidget(parent),
-    tabs(new QTabWidget(this)),
-    localView(new QTableView(this)),
-    importLocalButton(new QPushButton(tr("Import Local"), this)),
-    webView(new QTableView(this)),
-    importWebButton(new QPushButton(tr("Import Web"), this)),
-    requirementsPreview(new QPlainTextEdit(this)),
-    maxItemsSpin(new QSpinBox(this)),
-    backButton(new QPushButton(tr("Back"), this)),
-    m_maxItems(10)
+    listWidget(new QListWidget(this))
 {
-    setupUi();
-    loadSettings();
+    auto *layout = new QVBoxLayout(this);
+    layout->addWidget(listWidget);
+    setLayout(layout);
 }
 
-/******************************************************************
- * setupUi
- ******************************************************************/
-void MatrixHistory::setupUi()
+/****************************************************************
+ * @brief Destructor.
+ ***************************************************************/
+MatrixHistory::~MatrixHistory() = default;
+
+/****************************************************************
+ * @brief Set the history list to display.
+ ***************************************************************/
+void MatrixHistory::setHistory(const QStringList &history)
 {
-    // Local tab
-    QWidget *localTab = new QWidget(this);
-    QVBoxLayout *localLayout = new QVBoxLayout(localTab);
-    localLayout->addWidget(localView);
-    localLayout->addWidget(importLocalButton);
-    tabs->addTab(localTab, tr("Local"));
-
-    // Web tab
-    QWidget *webTab = new QWidget(this);
-    QVBoxLayout *webLayout = new QVBoxLayout(webTab);
-    webLayout->addWidget(webView);
-    webLayout->addWidget(importWebButton);
-    tabs->addTab(webTab, tr("Web"));
-
-    // Requirements preview tab
-    QWidget *reqTab = new QWidget(this);
-    QVBoxLayout *reqLayout = new QVBoxLayout(reqTab);
-    requirementsPreview->setReadOnly(true);
-    reqLayout->addWidget(requirementsPreview);
-    tabs->addTab(reqTab, tr("Requirements"));
-
-    // Settings tab
-    QWidget *settingsTab = new QWidget(this);
-    QVBoxLayout *settingsLayout = new QVBoxLayout(settingsTab);
-    maxItemsSpin->setRange(1, 100);
-    settingsLayout->addWidget(maxItemsSpin);
-    settingsLayout->addWidget(backButton);
-    tabs->addTab(settingsTab, tr("Settings"));
-
-    // Main layout
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->addWidget(tabs);
-    setLayout(mainLayout);
-
-    // Connections
-    connect(importLocalButton, &QPushButton::clicked,
-            this, &MatrixHistory::importLocalSelected);
-    connect(importWebButton, &QPushButton::clicked,
-            this, &MatrixHistory::importWebSelected);
-    connect(backButton, &QPushButton::clicked,
-            this, &MatrixHistory::backToMain);
-    connect(maxItemsSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &MatrixHistory::maxItemsChanged);
-}
-/******************************************************************
- * importLocalSelected
- ******************************************************************/
-void MatrixHistory::importLocalSelected()
-{
-    // TODO: replace with actual selection from localView
-    QString path = "dummy_local.txt";
-
-    // Update preview tab
-    requirementsPreview->setPlainText(
-        tr("Preview of local requirements from: %1").arg(path));
-
-    emit localHistoryImported(path);
-}
-
-/******************************************************************
- * importWebSelected
- ******************************************************************/
-void MatrixHistory::importWebSelected()
-{
-    // TODO: replace with actual selection from webView
-    QString url = "http://example.com/requirements.txt";
-
-    // Update preview tab
-    requirementsPreview->setPlainText(
-        tr("Preview of web requirements from: %1").arg(url));
-
-    emit webHistoryImported(url);
-}
-
-/******************************************************************
- * backToMain
- ******************************************************************/
-void MatrixHistory::backToMain()
-{
-    emit exitRequested();
-}
-
-/******************************************************************
- * loadSettings / saveSettings
- ******************************************************************/
-void MatrixHistory::loadSettings()
-{
-    QSettings s("PipMatrixResolverQt", "MatrixHistory");
-    m_maxItems    = s.value("recent/maxItems", 20).toInt();
-    m_recentLocal = s.value("recent/local").toStringList();
-    m_recentWeb   = s.value("recent/web").toStringList();
-    maxItemsSpin->setValue(m_maxItems);
-
-    refreshLocalTab();
-    refreshWebTab();
-}
-
-/******************************************************************
- * saveSettings
- ******************************************************************/
-void MatrixHistory::saveSettings() const
-{
-    QSettings s("PipMatrixResolverQt", "MatrixHistory");
-    s.setValue("recent/maxItems", m_maxItems);
-    s.setValue("recent/local", m_recentLocal);
-    s.setValue("recent/web", m_recentWeb);
-}
-
-/******************************************************************
- * refreshLocalTab
- ******************************************************************/
-void MatrixHistory::refreshLocalTab()
-{
-    auto *model = new QStandardItemModel(this);
-    model->setHorizontalHeaderLabels({ tr("Local Files") });
-
-    for (const QString &path : std::as_const(m_recentLocal))
+    if (history == currentHistory)
     {
-        auto *item = new QStandardItem(path);
-        item->setEditable(false);
-        model->appendRow(item);
+        return;
     }
 
-    localView->setModel(model);
-    localView->horizontalHeader()->setStretchLastSection(true);
+    currentHistory = history;
+    rebuildList();
+    emit historyChanged();
 }
 
-/******************************************************************
- * refreshWebTab
- ******************************************************************/
-void MatrixHistory::refreshWebTab()
+/****************************************************************
+ * @brief Get the current history list.
+ ***************************************************************/
+QStringList MatrixHistory::history() const
 {
-    auto *model = new QStandardItemModel(this);
-    model->setHorizontalHeaderLabels({ tr("Web URLs") });
+    return currentHistory;
+}
 
-    for (const QString &url : std::as_const(m_recentWeb))
+/****************************************************************
+ * @brief Rebuild the list widget from current history.
+ ***************************************************************/
+void MatrixHistory::rebuildList()
+{
+    listWidget->clear();
+    for (int i = 0; i < currentHistory.size(); ++i)
     {
-        auto *item = new QStandardItem(url);
-        item->setEditable(false);
-        model->appendRow(item);
+        listWidget->addItem(currentHistory.at(i));
     }
-
-    webView->setModel(model);
-    webView->horizontalHeader()->setStretchLastSection(true);
-}
-
-/******************************************************************
- * refreshRequirementsTab
- ******************************************************************/
-void MatrixHistory::refreshRequirementsTab(const QString &path)
-{
-    QFile f(path);
-    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        requirementsPreview->setPlainText(
-            QString::fromUtf8(f.readAll()));
-        f.close();
-    }
-}
-
-/******************************************************************
- * clearHistory
- ******************************************************************/
-void MatrixHistory::clearHistory()
-{
-    m_recentLocal.clear();
-    m_recentWeb.clear();
-
-    refreshLocalTab();
-    refreshWebTab();
-
-    saveSettings();
-
-    emit historyCleared();   // emit the signal here
-}
-
-/******************************************************************
- * maxItemsChanged
- ******************************************************************/
-void MatrixHistory::maxItemsChanged(int value)
-{
-    m_maxItems = value;
-    saveSettings();
 }
 
 /************** End of MatrixHistory.cpp **************************/

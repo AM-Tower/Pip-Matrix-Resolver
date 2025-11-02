@@ -28,7 +28,7 @@
         <item>
          <widget class="QSplitter" name="splitter">
           <property name="orientation">
-           <enum>Qt::Orientation::Horizontal</enum>
+           <enum>Qt::Horizontal</enum>
           </property>
           <widget class="QTableView" name="requirementsView"/>
           <widget class="QTableView" name="matrixView"/>
@@ -37,7 +37,7 @@
         <item>
          <widget class="QSplitter" name="bottomSplitter">
           <property name="orientation">
-           <enum>Qt::Orientation::Horizontal</enum>
+           <enum>Qt::Horizontal</enum>
           </property>
           <widget class="QPlainTextEdit" name="logView">
            <property name="readOnly">
@@ -133,8 +133,21 @@
     </property>
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
+    <addaction name="recentLocalMenu"/>
+    <addaction name="recentWebMenu"/>
+    <addaction name="actionOpenHistory"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="recentLocalMenu">
+    <property name="title">
+     <string>Recent local files</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="recentWebMenu">
+    <property name="title">
+     <string>Recent web URLs</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -202,6 +215,11 @@
    </property>
    <property name="text">
     <string>Fetch requirements from URL...</string>
+   </property>
+  </action>
+  <action name="actionOpenHistory">
+   <property name="text">
+    <string>Open History</string>
    </property>
   </action>
   <action name="actionExit">

@@ -1,4 +1,9 @@
 @echo off
+REM --- SET EXECUTION CONTEXT TO SCRIPT DIRECTORY ---
+REM Change drive and directory to the script's location
+CD /D "%~dp0"
+pushd "%~dp0"
+
 set "SRC=src"
 set "DEST=src_text"
 set "MERGED=source_files.txt"
@@ -28,7 +33,7 @@ if exist "README.md" (
 )
 
 :: Add CMakeLists.txt
-if exist "CMakeLists.txt" (
+if exist "CMakeListsList.txt" (
     echo ============================================== >> "%MERGED%"
     echo FILE: CMakeLists.txt >> "%MERGED%"
     echo ============================================== >> "%MERGED%"
@@ -64,16 +69,49 @@ echo ============================================== >> "%MERGED%"
 echo DIRECTORY LISTING >> "%MERGED%"
 echo ============================================== >> "%MERGED%"
 echo . >> "%MERGED%"
-for /f "delims=" %%F in ('dir /b /a:-d ^| findstr /v "build"') do (
-    echo ├── %%F >> "%MERGED%"
-)
-for /f "delims=" %%D in ('dir /b /a:d ^| findstr /v "build"') do (
-    echo ├── %%D >> "%MERGED%"
-    for /f "delims=" %%F in ('dir /b "%%D" ^| findstr /v "build"') do (
-        echo │   ├── %%F >> "%MERGED%"
+
+:: Define the exclusion pattern for build, .git, and .gitignore folders/files.
+:: Ensure we exclude the temporary file itself!
+set "TEMP_DIR_LISTING=temp_dir_list.txt"
+:: Note: Putting %TEMP_DIR_LISTING% in the pattern below prevents errors when processing the list.
+set "EXCLUDE_PATTERN=build ^\.git$ ^\.gitignore$ %TEMP_DIR_LISTING%$"
+
+:: --- NEW STABLE DIRECTORY LISTING LOGIC ---
+
+:: 1. List ALL root-level files and directories (AII, including system/hidden) into the temporary file.
+dir /b /a > "%TEMP_DIR_LISTING%"
+
+:: 2. Filter the listing - FOLDERS FIRST (A-Z)
+for /f "delims=" %%I in ('cmd /c type "%TEMP_DIR_LISTING%" ^| sort ^| findstr /v /i /r "%EXCLUDE_PATTERN%"') do (
+    :: Check if it's a directory
+    if exist "%%I\" (
+        REM --- Directory
+        echo ├── %%I >> "%MERGED%"
+        :: List contents of the subdirectory (files only)
+        :: Use sort and filtering for internal alphabetical order
+        for /f "delims=" %%J in ('dir /b /a:-s-d "%%I" 2^>nul ^| sort ^| findstr /v /i /r "%EXCLUDE_PATTERN%"') do (
+            echo │   ├── %%J >> "%MERGED%"
+        )
     )
 )
 
+:: 3. Filter the listing - FILES SECOND (A-Z)
+for /f "delims=" %%I in ('cmd /c type "%TEMP_DIR_LISTING%" ^| sort ^| findstr /v /i /r "%EXCLUDE_PATTERN%"') do (
+    :: Check if it's a file
+    if not exist "%%I\" (
+        REM --- File
+        echo ├── %%I >> "%MERGED%"
+    )
+)
+
+
+:: 4. Cleanup temporary file
+del "%TEMP_DIR_LISTING%" 2>nul
+
 echo [OK] All files copied to "%DEST%" with .txt extension.
 echo [OK] Combined file created: "%MERGED%"
+
+REM --- RESTORE ORIGINAL DIRECTORY ---
+popd
+
 pause

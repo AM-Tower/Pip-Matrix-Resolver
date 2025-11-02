@@ -8,39 +8,41 @@
 
 int main(int argc, char *argv[])
 {
-    QApplication theApplication(argc, argv);
+        QApplication theApplication(argc, argv);
 
-    // Register compiled resources
-    Q_INIT_RESOURCE(PipMatrixResolverQt);
+        // Register compiled resources
+        Q_INIT_RESOURCE(PipMatrixResolverQt);
 
-    // Enable icons in menus globally
-    theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
+        // Enable icons in menus globally
+        theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
 
-    // Set application icon
-    QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
+        // Set application icon
+        QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
 
-    // Diagnostics
-    qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
+        // Diagnostics
+        qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
 
-    // Translation loading
-    const QString languageCode = QLocale::system().name().split('_').first();
-    auto loadTranslator = [&](const QString &baseName) -> bool {
-        QTranslator *tr = new QTranslator(&theApplication);
-        const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
-        if (tr->load(qmFile)) {
-            theApplication.installTranslator(tr);
-            qDebug() << "Loaded translation:" << qmFile;
-            return true;
-        }
-        delete tr;
-        return false;
-    };
+        // Translation loading
+        const QString languageCode = QLocale::system().name().split('_').first();
+        auto loadTranslator = [&](const QString &baseName) -> bool
+        {
+            QTranslator *tr = new QTranslator(&theApplication);
+            const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
+            if (tr->load(qmFile))
+            {
+                theApplication.installTranslator(tr);
+                qDebug() << "Loaded translation:" << qmFile;
+                return true;
+            }
+            delete tr;
+            return false;
+        };
 
-    loadTranslator("PipMatrixResolverQt");
-    loadTranslator("MatrixUtility");
-    loadTranslator("MatrixHistory");
+        loadTranslator("PipMatrixResolverQt");
+        loadTranslator("MatrixUtility");
+        loadTranslator("MatrixHistory");
 
-    MainWindow w;
-    w.show();
-    return theApplication.exec();
+        MainWindow w;
+        w.show();
+        return theApplication.exec();
 }

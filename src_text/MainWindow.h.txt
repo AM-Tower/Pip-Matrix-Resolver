@@ -1,87 +1,89 @@
-/******************************************************************
- * File: MainWindow.h
- * Author: Jeffrey Scott Flesher
- * Description:
- *   Main application window for PipMatrixResolverQt.
- *   Provides menus, log view, progress bar, and integration with
- *   ResolverEngine, VenvManager, BatchRunner, MatrixHistory, and
- *   MatrixUtility.
+/****************************************************************
+ * @file MainWindow.h
+ * @brief Declares the main application window for
+ *        PipMatrixResolverQt.
  *
- * Version: 0.5
- * Date:    2025-11-01
- ******************************************************************/
+ * @author Jeffrey
+ * @version 0.6
+ * @date    2025-11-01
+ * @section License Unlicensed, MIT, or any.
+ * @section DESCRIPTION
+ * Defines the MainWindow class, which provides the GUI for
+ * loading requirements, managing history, running batch jobs,
+ * and integrating with ResolverEngine and VenvManager.
+ ***************************************************************/
 
 #pragma once
 
 #include <QMainWindow>
 #include <QStringList>
 
-class QPlainTextEdit;
-class QProgressBar;
-class QTableView;
-class QStandardItemModel;
-class MatrixHistory;
 class ResolverEngine;
 class VenvManager;
 class BatchRunner;
+class MatrixHistory;
+class QStandardItemModel;
+class QPlainTextEdit;
+class QProgressBar;
+class QTableView;
+class QMenu;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
+/****************************************************************
+ * @class MainWindow
+ * @brief Implements the main application window.
+ ***************************************************************/
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow() override;
+    ~MainWindow();
 
 private slots:
     void openLocalRequirements();
     void fetchRequirementsFromUrl();
-    void openMatrixHistory();
     void createOrUpdateVenv();
     void startResolve();
     void pauseResolve();
     void resumeResolve();
     void stopResolve();
     void runBatch();
-    void showAboutBox();
-    void showReadmeDialog();
-    void exitApp();
-
-    // internal helpers
     void appendLog(const QString &line);
     void updateProgress(int percent);
     void showCompiledResult(const QString &path);
+    void showAboutBox();
+    void showReadmeDialog();
+    void openMatrixHistory();
 
 private:
-    void bindSignals();
-    void applyToolsEnabled(bool enabled);
-    void refreshRecentMenus();
-
     Ui::MainWindow *ui;
-
-    // Core components
     ResolverEngine *resolver;
     VenvManager *venv;
     BatchRunner *batch;
-
-    // Models and views
+    MatrixHistory *historyWidget;
     QStandardItemModel *requirementsModel;
     QTableView *requirementsView;
     QTableView *matrixView;
     QPlainTextEdit *logView;
     QProgressBar *progress;
-    MatrixHistory *historyWidget;
-
-    // Recent history
+    QMenu *recentLocalMenu;
+    QMenu *recentWebMenu;
     QStringList historyRecentLocal;
     QStringList historyRecentWeb;
-    QMenu *recentLocalMenu {nullptr};
-    QMenu *recentWebMenu {nullptr};
-
-    // State
     bool hasValidRequirements;
+
+    void bindSignals();
+    void applyToolsEnabled(bool enabled);
+    void loadHistory();
+    void saveHistory();
+    void refreshRecentMenus();
+    void syncHistoryToWidget();
+    void onHistoryChanged();
 };
+
+/************** End of MainWindow.h **************************/
