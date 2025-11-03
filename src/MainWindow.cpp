@@ -296,11 +296,7 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     QByteArray content;
     if (!downloadText(url, content))
     {
-        QMessageBox::warning(
-            this,
-            tr("Download failed"),
-            tr("Failed to fetch requirements from URL:\n%1").arg(url)
-        );
+        QMessageBox::warning(this, tr("Download failed"), tr("Failed to fetch requirements from URL:\n%1").arg(url));
         historyRecentWeb.removeAll(url);
         refreshRecentMenus();
         saveHistory();
@@ -310,11 +306,7 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     QStringList errors;
     if (!validateRequirementsWithErrors(lines, errors))
     {
-        QMessageBox::warning(
-            this,
-            tr("Invalid requirements.txt"),
-            tr("Fetched content failed validation:\n%1").arg(errors.join("\n"))
-        );
+        QMessageBox::warning(this, tr("Invalid requirements.txt"), tr("Fetched content failed validation:\n%1").arg(errors.join("\n")));
         return;
     }
     if (requirementsModel)
@@ -593,8 +585,7 @@ void MainWindow::showCompiledResult(const QString &path)
  ***************************************************************/
 void MainWindow::showAboutBox()
 {
-    QMessageBox::about(
-        this,
+    QMessageBox::about(this,
         tr("About Pip Matrix Resolver"),
         tr("<b>Pip Matrix Resolver</b><br>"
            "Cross-platform Qt tool to resolve "
@@ -1168,7 +1159,8 @@ void MainWindow::onCreateVenv()
     proc.start(script, args);
     proc.waitForFinished(-1);
     QString output = proc.readAllStandardOutput();
-    QMessageBox::information(this, tr("Create venv_running"), output);
+    ui->statusbar->showMessage(tr("Switching to Terminal tab. Created/Updated venv_running: %1").arg(output));
+    ui->mainTabs->setCurrentWidget(ui->tabTerminal);
 }
 
 /****************************************************************

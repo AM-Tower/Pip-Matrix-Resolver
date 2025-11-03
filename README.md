@@ -155,5 +155,53 @@ Batch → Run batch conversion to mp4 – Combine audio and image into MP4
 Help → About – Show app info
 ```
 
+## Terminal Tab — What You Can Do
+* Run Python scripts:
+    * python myscript.py
+
+* Install a package:
+    * pip install package_name
+
+* Uninstall a package:
+    * pip uninstall package_name
+
+* List installed packages:
+    * pip list
+
+* Show package details:
+    * pip show package_name
+
+* Upgrade a package:
+    * pip install --upgrade package_name
+
+* Run pip-tools commands:
+    * pip-compile requirements.in
+    * pip-sync
+
+* Check Python version:
+    * python --version
+
+* Check pip version:
+    * pip --version
+
+* Run any shell command:
+    * On Windows: dir
+    * On Linux/macOS: ls
+
+* View contents of a file:
+    * On Windows: type filename.txt
+    * On Linux/macOS: cat filename.txt
+
+* Check environment variables:
+    * On Windows: set
+    * On Linux/macOS: env
+
+* Run batch or shell scripts:
+    * bash script.sh (Linux/macOS)
+    * script.bat (Windows)
+
+* Deactivate the virtual environment (if you started a shell session manually):
+    * deactivate
+
 ## License: 
     Unlicensed, MIT or your chosen license
