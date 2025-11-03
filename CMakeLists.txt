@@ -42,7 +42,8 @@ qt_add_executable(PipMatrixResolverQt
     src/BatchRunner.h
 
     ${APP_RESOURCES}
-    ${QM_FILES}   # ensures .qm files are built before linking
+    ${QM_FILES}
+    src/venv_manager.py   # ensures .qm files are built before linking
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE

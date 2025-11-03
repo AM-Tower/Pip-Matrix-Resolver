@@ -137,8 +137,7 @@ backup_old_output()
 {
     # Use the new relative path for backup folder
     mkdir -p "$SRC_BACKUP_FOLDER"
-    if [[ -f "$OUTPUT_FILE" ]]
-    then
+    if [[ -f "$OUTPUT_FILE" ]]; then
         local timestamp
         timestamp="$(date +"%Y-%m-%d_%H-%M-%S")"
 
@@ -149,6 +148,37 @@ backup_old_output()
         cp "$OUTPUT_FILE" "$backup_file"
         echo "# Backup created: $backup_file"
     fi
+}
+
+#------------------------------------------------------------------------------
+# Function: backup_old_src_text
+# Description:
+#   Moves the existing SRC_TEXT_FOLDER to a timestamped archive
+#   in the backup folder before new files are created.
+#------------------------------------------------------------------------------
+backup_old_src_text()
+{
+    # Check if the source text folder exists and is not empty
+    # We check for any file ('-A' lists all except . and ..)
+    if [[ -d "$SRC_TEXT_FOLDER" ]] && [[ -n "$(ls -A "$SRC_TEXT_FOLDER" 2>/dev/null)" ]]; then
+        echo "# Found old files in $SRC_TEXT_FOLDER. Backing them up..."
+
+        # Ensure backup directory exists
+        mkdir -p "$SRC_BACKUP_FOLDER"
+
+        local timestamp
+        timestamp="$(date +"%Y-%m-%d_%H-%M-%S")"
+
+        local target_backup_dir
+        target_backup_dir="${SRC_BACKUP_FOLDER}/src_text-${timestamp}"
+
+        # Rename the existing folder to the new backup location
+        mv "$SRC_TEXT_FOLDER" "$target_backup_dir"
+        echo "# Old src_text files moved to: $target_backup_dir"
+    fi
+
+    # The write_output function will recreate the SRC_TEXT_FOLDER as needed
+    # because it calls 'mkdir -p "$SRC_TEXT_FOLDER"'
 }
 
 #------------------------------------------------------------------------------
@@ -186,8 +216,7 @@ print_tree()
 
         local last_index=$(( ${#entries[@]} - 1 ))
 
-        for i in "${!entries[@]}"
-        do
+        for i in "${!entries[@]}"; do
             local path="${entries[$i]}"
             local base; base=$(basename "$path")
             local connector="├──"
@@ -222,9 +251,7 @@ print_tree()
 collect_files()
 {
     # Construct the base command array
-    local FIND_COMMAND=(
-        find . -type f
-    )
+    local FIND_COMMAND=(find . -type f)
 
     # Append the dynamically built exclusion arguments (ShellCheck safe array expansion)
     FIND_COMMAND+=("${EXCLUDE_FIND_ARGS[@]}")
@@ -259,11 +286,10 @@ write_output()
         echo "# Generated on: $(date +"%Y-%m-%d %H:%M:%S")"
         system_info
         echo "# This file is used to show full source code, cmake, read me, and file locates."
-        echo "#==============================================================================="
+        echo "#================================C"
         echo
         mapfile -t files < <(collect_files)
-        for f in "${files[@]}"
-        do
+        for f in "${files[@]}"; do
             [[ -f "$f" ]] || continue
 
             # Copy the file to the new folder with the .txt suffix
@@ -287,8 +313,10 @@ write_output()
 # Main
 #------------------------------------------------------------------------------
 backup_old_output
+backup_old_src_text # New step: Archive old src_text before writing new files
 write_output
 
+# FIX: Corrected variable typo from $OUTPUT_File to $OUTPUT_FILE
 echo "Output written to: $OUTPUT_FILE"
 echo "Individual file copies written to: $SRC_TEXT_FOLDER" # Added info message
 if [ "$SHOW_OUTPUT" = "true" ]; then
@@ -298,3 +326,4 @@ if [ "$SHOW_OUTPUT" = "true" ]; then
     more "$OUTPUT_FILE"
 fi
 # End of script src2txt.sh #
+

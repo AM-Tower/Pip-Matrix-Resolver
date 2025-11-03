@@ -1,9 +1,9 @@
 #===============================================================================
 # Project: PipMatrixResolver
-# Generated on: 2025-11-02 11:20:15
+# Generated on: 2025-11-02 18:20:11
 # OS: WSL on Ubuntu: 24.04
 # This file is used to show full source code, cmake, read me, and file locates.
-#===============================================================================
+#================================C
 
 #-------------------------------------------------------------------------------
 # File: CMakeLists.txt
@@ -25,10 +25,6 @@ qt_standard_project_setup()
 set(TS_FILES
     translations/PipMatrixResolverQt_en.ts
     translations/PipMatrixResolverQt_es.ts
-    translations/MatrixUtility_en.ts
-    translations/MatrixUtility_es.ts
-    translations/MatrixHistory_en.ts
-    translations/MatrixHistory_es.ts
 )
 
 qt_add_translation(QM_FILES ${TS_FILES})
@@ -54,11 +50,10 @@ qt_add_executable(PipMatrixResolverQt
     src/PipToolsRunner.h
     src/BatchRunner.cpp
     src/BatchRunner.h
-    src/MatrixUtility.h src/MatrixUtility.cpp
-    src/MatrixHistory.h src/MatrixHistory.cpp
 
     ${APP_RESOURCES}
-    ${QM_FILES}   # ensures .qm files are built before linking
+    ${QM_FILES}
+    src/venv_manager.py   # ensures .qm files are built before linking
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
@@ -121,11 +116,8 @@ install(TARGETS PipMatrixResolverQt)
     <qresource prefix="/translations">
         <file>translations/PipMatrixResolverQt_en.qm</file>
         <file>translations/PipMatrixResolverQt_es.qm</file>
-        <file>translations/MatrixUtility_en.qm</file>
-        <file>translations/MatrixUtility_es.qm</file>
-        <file>translations/MatrixHistory_en.qm</file>
-        <file>translations/MatrixHistory_es.qm</file>
     </qresource>
+
     <!-- Docs -->
     <qresource prefix="/docs">
         <file>README.md</file>
@@ -470,87 +462,66 @@ private:
  * @section License Unlicensed, MIT, or any.
  * @section DESCRIPTION
  * Implements the main window logic: settings, history, menus,
- * file and URL loaders, logging, and UI dialog wiring. All
- * design stays in .ui; this file wires UI to behavior.
+ * file and URL loaders, logging, and UI dialog wiring.
  ***************************************************************/
 
 #include "MainWindow.h"
 #include "ui_MainWindow.h"
-
+#include <QApplication>
 #include <QFileDialog>
-#include <QMessageBox>
-#include <QInputDialog>
-#include <QSettings>
-#include <QStandardItemModel>
-#include <QTableView>
+#include <QHeaderView>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QEventLoop>
+#include <QUrl>
+#include <utility> // Add this to your includes for std::as_const
+#include <QSysInfo>
+#include <QProcess>
 #include <QPlainTextEdit>
-#include <QProgressBar>
-#include <QMenu>
-#include <QAction>
-#include <QDateTime>
-#include <QDialog>
-#include <QTextBrowser>
-#include <QVBoxLayout>
-#include <QPushButton>
-#include <QFile>
+#include <QLineEdit>
 #include <QDir>
-#include <QFileInfo>
-#include <QDialogButtonBox>
-#include <limits>
-#include <QStringList>
-#include <QByteArray>
-#include <QDebug>
-#include <QTimer>
 
 /****************************************************************
- * @brief MatrixUtility namespace.
+ * @brief Globals for MainWindow.
  ***************************************************************/
-namespace MatrixUtility
-{
-    QStringList readTextFileLines(const QString &path);
-    bool validateRequirementsWithErrors(const QStringList &lines, QStringList &errors);
-    void writeTableToModel(QStandardItemModel *model, const QStringList &lines);
-    QString normalizeRawUrl(const QString &inputUrl);
-    bool downloadText(const QString &url, QByteArray &out);
-    QString logsDir();
-}
-
+QString MainWindow::appVersion = "1.0";
+const QString DEFAULT_PYTHON_VERSION = "3.11";
+const QString DEFAULT_PIP_VERSION = "23.2";
+const QString DEFAULT_PIPTOOLS_VERSION = "6.13";
+const int DEFAULT_MAX_ITEMS = 10;
+const QString DEFAULT_APP_VERSION = "1.0";
+const QString MainWindow::kOrganizationName = "AM-Tower";
+const QString MainWindow::kApplicationName = "PipMatrixResolver";
 /****************************************************************
- * @brief Constructor.
+ * @brief Constructor for MainWindow.
  ***************************************************************/
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
     ui(new Ui::MainWindow),
-    resolver(nullptr),
-    venv(nullptr),
-    batch(nullptr),
     requirementsModel(new QStandardItemModel(this)),
     requirementsView(nullptr),
     logView(nullptr),
     progress(nullptr),
     recentLocalMenu(nullptr),
     recentWebMenu(nullptr),
-    historyWidget(nullptr),
-    maxHistoryItems(10),
-    appVersion(QStringLiteral("1.0"))
+    maxHistoryItems(10)
 {
     ui->setupUi(this);
 
-    // Find the index of actionFetchRequirements in menuFile
+    // Manually add Recent Local and Recent Web submenus after actionFetchRequirements
     QList<QAction*> actions = ui->menuFile->actions();
     int insertIndex = -1;
-    for (int i = 0; i < actions.size(); ++i) {
-        if (actions[i] == ui->actionFetchRequirements) {
+    for (int i = 0; i < actions.size(); ++i)
+    {
+        if (actions[i] == ui->actionFetchRequirements)
+        {
             insertIndex = i;
             break;
         }
     }
-
-    // Create the submenus
     recentLocalMenu = new QMenu(tr("Recent Local"), this);
     recentWebMenu = new QMenu(tr("Recent Web"), this);
-
-    // Insert them after actionFetchRequirements
     if (insertIndex != -1)
     {
         ui->menuFile->insertMenu(actions[insertIndex + 1], recentLocalMenu);
@@ -558,53 +529,110 @@ MainWindow::MainWindow(QWidget *parent)
     }
     else
     {
-        // Fallback: add at the end
         ui->menuFile->addMenu(recentLocalMenu);
         ui->menuFile->addMenu(recentWebMenu);
     }
 
-    // Bind core widgets created in Designer
     requirementsView = ui->requirementsView;
     logView = ui->logView;
+    localHistoryTable = ui->localHistoryTable;
+    webHistoryTable = ui->webHistoryTable;
+    localHistoryModel = new QStandardItemModel(this);
+    webHistoryModel = new QStandardItemModel(this);
+    localHistoryTable->setModel(localHistoryModel);
+    webHistoryTable->setModel(webHistoryModel);
     progress = ui->progressBar;
-    historyWidget = ui->matrixHistoryWidget;
 
-    // Attach the model once, right after setupUi
+    gpuDetectedCheckBox = ui->gpuDetectedCheckBox;
+    useCpuCheckBox = ui->useCpuCheckBox;
+    cudaCheckBox = ui->cudaCheckBox;
+    osEdit = ui->osEdit;
+    osReleaseEdit = ui->osReleaseEdit;
+    osVersionEdit = ui->osVersionEdit;
+
     requirementsView->setModel(requirementsModel);
     requirementsView->setAlternatingRowColors(true);
     requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
     requirementsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    requirementsView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    requirementsView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    requirementsView->resizeColumnsToContents();
+    requirementsView->resizeRowsToContents();
+    requirementsView->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
+    requirementsView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    requirementsView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
 
-    // Settings and history
     loadAppSettings();
     loadHistory();
 
-    // Defer menu population until UI is fully realized
-    QTimer::singleShot(0, this, &MainWindow::onInitialized);
-
-    // Connect actions
-    connect(ui->actionOpenRequirements, &QAction::triggered,
-            this, &MainWindow::openLocalRequirements);
-    connect(ui->actionFetchRequirements, &QAction::triggered,
-            this, &MainWindow::fetchRequirementsFromUrl);
+    connect(ui->actionOpenRequirements, &QAction::triggered, this, &MainWindow::openLocalRequirements);
+    connect(ui->actionFetchRequirements, &QAction::triggered, this, &MainWindow::fetchRequirementsFromUrl);
+    connect(ui->actionExit, &QAction::triggered, this, &MainWindow::exitApp);
 
     if (ui->buttonBoxPreferences)
     {
-        connect(ui->buttonBoxPreferences, &QDialogButtonBox::accepted,
-                this, &MainWindow::saveAppSettings);
-        QPushButton *applyBtn =
-            ui->buttonBoxPreferences->button(QDialogButtonBox::Apply);
+        connect(ui->buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
+        QPushButton *applyBtn = ui->buttonBoxPreferences->button(QDialogButtonBox::Apply);
         if (applyBtn)
         {
-            connect(applyBtn, &QPushButton::clicked,
-                    this, &MainWindow::saveAppSettings);
+            connect(applyBtn, &QPushButton::clicked, this, &MainWindow::saveAppSettings);
         }
     }
-    connect(ui->actionExit, &QAction::triggered, this, &MainWindow::exitApp);
+    connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::showAboutBox);
+    connect(ui->actionViewReadme, &QAction::triggered, this, &MainWindow::showReadmeDialog);
+    ui->mainTabs->setCurrentIndex(0);
+    ui->mainTabs->setCurrentWidget(ui->tabMain);
+
+    // History tables and models
+    localHistoryTable = ui->localHistoryTable;
+    webHistoryTable = ui->webHistoryTable;
+    localHistoryModel = new QStandardItemModel(this);
+    webHistoryModel = new QStandardItemModel(this);
+    localHistoryTable->setModel(localHistoryModel);
+    webHistoryTable->setModel(webHistoryModel);
+
+    connect(localHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, &MainWindow::updateLocalHistoryButtons);
+    connect(webHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, &MainWindow::updateWebHistoryButtons);
+    connect(ui->actionCreateVenv, &QAction::triggered, this, &MainWindow::onCreateVenv);
+
+    // Terminal tab
+    connect(ui->runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
+    connect(ui->clearTerminalBtn, &QPushButton::clicked, this, &MainWindow::onClearTerminal);
+
+    // Package Manager tab
+    connect(ui->searchPackageBtn, &QPushButton::clicked, this, &MainWindow::onSearchPackage);
+    connect(ui->installPackageBtn, &QPushButton::clicked, this, &MainWindow::onInstallPackage);
+    connect(ui->uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
+/*
+ * Auto connected
+    // Connect local history buttons
+    connect(ui->localAddButton,    &QPushButton::clicked, this, &MainWindow::on_localAddButton_clicked);
+    connect(ui->localEditButton,   &QPushButton::clicked, this, &MainWindow::on_localEditButton_clicked);
+    connect(ui->localDeleteButton, &QPushButton::clicked, this, &MainWindow::on_localDeleteButton_clicked);
+    connect(ui->localUpButton,     &QPushButton::clicked, this, &MainWindow::on_localUpButton_clicked);
+    connect(ui->localDownButton,   &QPushButton::clicked, this, &MainWindow::on_localDownButton_clicked);
+
+    // Connect web history buttons
+    connect(ui->webAddButton,    &QPushButton::clicked, this, &MainWindow::on_webAddButton_clicked);
+    connect(ui->webEditButton,   &QPushButton::clicked, this, &MainWindow::on_webEditButton_clicked);
+    connect(ui->webDeleteButton, &QPushButton::clicked, this, &MainWindow::on_webDeleteButton_clicked);
+    connect(ui->webUpButton,     &QPushButton::clicked, this, &MainWindow::on_webUpButton_clicked);
+    connect(ui->webDownButton,   &QPushButton::clicked, this, &MainWindow::on_webDownButton_clicked);
+*/
+    // Refresh tables on startup
+    refreshRecentMenus();
+    refreshHistoryTables();
+    checkAndRestoreSettings();
+
+    detectSystem();         // Detect OS, release, version, GPU
+    restoreCpuCudaSettings(); // Restore CPU/Cuda settings from QSettings
+    setupVenvPaths();       // Set up venv_running and venv_testing paths
 }
 
 /****************************************************************
- * @brief Destructor.
+ * @brief Destructor for MainWindow.
  ***************************************************************/
 MainWindow::~MainWindow()
 {
@@ -612,62 +640,28 @@ MainWindow::~MainWindow()
 }
 
 /****************************************************************
- * @brief Called once after construction to finalize setup.
+ * @brief Exits the application.
  ***************************************************************/
-void MainWindow::onInitialized()
+void MainWindow::exitApp()
 {
-    refreshRecentMenus();
-    ensureViewScrollable();
+    QApplication::quit();
 }
 
 /****************************************************************
- * @brief Ensure requirementsView is scrollable and sized.
- ***************************************************************/
-void MainWindow::ensureViewScrollable()
-{
-    if (!requirementsView)
-    {
-        requirementsView = ui ? ui->requirementsView : nullptr;
-        if (!requirementsView)
-        {
-            qWarning() << "ensureViewScrollable: requirementsView still null";
-            return;
-        }
-    }
-
-    if (!requirementsView->model())
-    {
-        qWarning() << "ensureViewScrollable: no model set, attaching default";
-        requirementsView->setModel(requirementsModel);
-    }
-
-    requirementsView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    requirementsView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    requirementsView->resizeColumnsToContents();
-    requirementsView->resizeRowsToContents();
-
-    requirementsView->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
-    requirementsView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    requirementsView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
-}
-
-/****************************************************************
- * @brief Open requirements from a local file.
+ * @brief Opens requirements from a local file via dialog.
  ***************************************************************/
 void MainWindow::openLocalRequirements()
 {
     QString path = QFileDialog::getOpenFileName(this, tr("Open requirements.txt"), QString(), tr("Text Files (*.txt)"));
-
     if (path.isEmpty())
     {
         return;
     }
-
     loadRequirementsFromFile(path);
 }
 
 /****************************************************************
- * @brief Fetch requirements from a URL via dialog.
+ * @brief Fetches requirements from a URL via dialog.
  ***************************************************************/
 void MainWindow::fetchRequirementsFromUrl()
 {
@@ -679,19 +673,17 @@ void MainWindow::fetchRequirementsFromUrl()
         QLineEdit::Normal,
         "",
         &ok
-        );
-
+    );
     if (!ok || inputUrl.isEmpty())
     {
         return;
     }
-
-    const QString rawUrl = MatrixUtility::normalizeRawUrl(inputUrl);
+    const QString rawUrl = normalizeRawUrl(inputUrl);
     loadRequirementsFromUrl(rawUrl);
 }
 
 /****************************************************************
- * @brief Load requirements from a local file.
+ * @brief Loads requirements from a local file.
  ***************************************************************/
 void MainWindow::loadRequirementsFromFile(const QString &path)
 {
@@ -699,38 +691,31 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     {
         return;
     }
-
     if (!QFile::exists(path))
     {
         QMessageBox::warning(this, tr("File missing"), tr("File no longer exists:\n%1").arg(path));
-
         historyRecentLocal.removeAll(path);
         refreshRecentMenus();
         saveHistory();
         return;
     }
-
-    const QStringList lines = MatrixUtility::readTextFileLines(path);
-
+    const QStringList lines = readTextFileLines(path);
     QStringList errors;
-    if (!MatrixUtility::validateRequirementsWithErrors(lines, errors))
+    if (!validateRequirementsWithErrors(lines, errors))
     {
         QMessageBox::warning(
             this,
             tr("Invalid requirements.txt"),
             tr("Validation failed:\n%1").arg(errors.join("\n"))
-            );
+        );
         return;
     }
-
     if (requirementsModel)
     {
         requirementsModel->clear();
         writeTableToModel(lines);
     }
-
-    applyToolsEnabled(true);
-
+    applySettingsFromUi();
     historyRecentLocal.removeAll(path);
     historyRecentLocal.prepend(path);
     if (maxHistoryItems != -1)
@@ -742,12 +727,11 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     }
     refreshRecentMenus();
     saveHistory();
-
     appendLog(tr("Loaded %1 requirements from %2").arg(requirementsModel->rowCount()).arg(path));
 }
 
 /****************************************************************
- * @brief Load requirements from a URL.
+ * @brief Loads requirements from a URL.
  ***************************************************************/
 void MainWindow::loadRequirementsFromUrl(const QString &url)
 {
@@ -755,46 +739,36 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     {
         return;
     }
-
     QByteArray content;
-    if (!MatrixUtility::downloadText(url, content))
+    if (!downloadText(url, content))
     {
         QMessageBox::warning(
             this,
             tr("Download failed"),
             tr("Failed to fetch requirements from URL:\n%1").arg(url)
-            );
-
+        );
         historyRecentWeb.removeAll(url);
         refreshRecentMenus();
         saveHistory();
         return;
     }
-
-    const QStringList lines =
-        QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
-
+    const QStringList lines = QString::fromUtf8(content).split('\n', Qt::KeepEmptyParts);
     QStringList errors;
-    if (!MatrixUtility::validateRequirementsWithErrors(lines, errors))
+    if (!validateRequirementsWithErrors(lines, errors))
     {
         QMessageBox::warning(
             this,
             tr("Invalid requirements.txt"),
-            tr("Fetched content failed validation:\n%1")
-                .arg(errors.join("\n"))
-            );
+            tr("Fetched content failed validation:\n%1").arg(errors.join("\n"))
+        );
         return;
     }
-
     if (requirementsModel)
     {
         requirementsModel->clear();
         writeTableToModel(lines);
     }
-
-    ensureViewScrollable();
-    applyToolsEnabled(true);
-
+    applySettingsFromUi();
     historyRecentWeb.removeAll(url);
     historyRecentWeb.prepend(url);
     if (maxHistoryItems != -1)
@@ -806,14 +780,46 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     }
     refreshRecentMenus();
     saveHistory();
-
     appendLog(tr("Fetched %1 requirements from URL: %2")
-                  .arg(requirementsModel->rowCount())
-                  .arg(url));
+        .arg(requirementsModel->rowCount())
+        .arg(url));
 }
 
 /****************************************************************
- * @brief Refresh recent file and URL menus safely.
+ * @brief Populates the local and web history tables in the
+ *        History tab with the current history data from QSettings.
+ ***************************************************************/
+void MainWindow::refreshHistoryTables()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList localList = s.value("history/recentLocal").toStringList();
+    QStringList webList = s.value("history/recentWeb").toStringList();
+
+    localHistoryModel->clear();
+    localHistoryModel->setHorizontalHeaderLabels({tr("Recent Local Files")});
+    for (const QString &path : std::as_const(localList))
+    {
+        QList<QStandardItem*> row;
+        row << new QStandardItem(path);
+        localHistoryModel->appendRow(row);
+    }
+    localHistoryTable->resizeColumnsToContents();
+
+    webHistoryModel->clear();
+    webHistoryModel->setHorizontalHeaderLabels({tr("Recent Web URLs")});
+    for (const QString &url : std::as_const(webList))
+    {
+        QList<QStandardItem*> row;
+        row << new QStandardItem(url);
+        webHistoryModel->appendRow(row);
+    }
+    webHistoryTable->resizeColumnsToContents();
+    updateLocalHistoryButtons();
+    updateWebHistoryButtons();
+}
+
+/****************************************************************
+ * @brief Refreshes recent file and URL menus safely.
  ***************************************************************/
 void MainWindow::refreshRecentMenus()
 {
@@ -822,7 +828,6 @@ void MainWindow::refreshRecentMenus()
         qWarning() << "refreshRecentMenus: menus not available, skipping";
         return;
     }
-
     recentLocalMenu->clear();
     recentWebMenu->clear();
 
@@ -872,7 +877,7 @@ void MainWindow::refreshRecentMenus()
 }
 
 /****************************************************************
- * @brief Clear all history (local + web).
+ * @brief Clears both local and web recent history lists.
  ***************************************************************/
 void MainWindow::clearAllHistory()
 {
@@ -884,69 +889,26 @@ void MainWindow::clearAllHistory()
 }
 
 /****************************************************************
- * @brief Save persistent history to QSettings.
- ***************************************************************/
-void MainWindow::saveHistory()
-{
-    QSettings s;
-    s.setValue("history/recentLocal", historyRecentLocal.count());
-    s.setValue("history/recentWeb", historyRecentWeb.count());
-    qDebug() << __func__ << ": Loaded local:" << historyRecentLocal;
-    qDebug() << __func__ << ": Loaded web:" << historyRecentWeb;
-
-}
-
-/****************************************************************
- * @brief Load persistent history from QSettings.
- ***************************************************************/
-void MainWindow::loadHistory()
-{
-    QSettings s;
-    historyRecentLocal = s.value("history/recentLocal").toStringList();
-    historyRecentWeb = s.value("history/recentWeb").toStringList();
-    qDebug() << __func__ << ": Loaded local:" << historyRecentLocal.count();
-    qDebug() << __func__ << ": Loaded web:" << historyRecentWeb.count();
-
-    if (maxHistoryItems != -1)
-    {
-        while (historyRecentLocal.size() > maxHistoryItems)
-        {
-            historyRecentLocal.removeLast();
-        }
-        while (historyRecentWeb.size() > maxHistoryItems)
-        {
-            historyRecentWeb.removeLast();
-        }
-    }
-}
-
-/****************************************************************
- * @brief Load application settings and reflect in UI.
+ * @brief Loads application settings from QSettings to UI.
  ***************************************************************/
 void MainWindow::loadAppSettings()
 {
     QSettings settings;
     maxHistoryItems = settings.value("app/maxItems", 10).toInt();
-    appVersion = settings.value("app/version", "1.0").toString();
-
     validateAppSettings();
     updateUiFromSettings();
 }
 
 /****************************************************************
- * @brief Save application settings from UI to QSettings.
+ * @brief Saves application settings from UI to QSettings.
  ***************************************************************/
 void MainWindow::saveAppSettings()
 {
     applySettingsFromUi();
     validateAppSettings();
-
     QSettings settings;
     settings.setValue("app/maxItems", maxHistoryItems);
-    settings.setValue("app/version", appVersion);
-
     statusBar()->showMessage(tr("Settings saved"), 2000);
-
     if (maxHistoryItems != -1)
     {
         while (historyRecentLocal.size() > maxHistoryItems)
@@ -963,49 +925,30 @@ void MainWindow::saveAppSettings()
 }
 
 /****************************************************************
- * @brief Validate and clamp all settings to safe ranges.
+ * @brief Validates and clamps settings to safe ranges.
  ***************************************************************/
-
 void MainWindow::validateAppSettings()
 {
-    // Clamp maxHistoryItems: -1 = unlimited, 1+ = valid, 0 not allowed
     if (maxHistoryItems == 0)
     {
-        maxHistoryItems = 10; // Default to 10 if 0
+        maxHistoryItems = 10;
     }
     else if (maxHistoryItems < -1)
     {
-        maxHistoryItems = 1; // Clamp to minimum valid value
-    }
-
-    // Validate appVersion: must not be empty, no segment may be "0"
-    QStringList parts = appVersion.split('.', Qt::SkipEmptyParts);
-    bool valid = !appVersion.trimmed().isEmpty();
-    for (int i = 0; i < parts.size(); ++i)
-    {
-        if (parts.at(i).trimmed() == QLatin1String("0"))
-        {
-            valid = false;
-            break;
-        }
-    }
-    if (!valid)
-    {
-        appVersion = QStringLiteral("1.0");
+        maxHistoryItems = 1;
     }
 }
 
 /****************************************************************
- * @brief Apply settings from UI widgets to internal state.
+ * @brief Applies settings from UI widgets to member state.
  ***************************************************************/
 void MainWindow::applySettingsFromUi()
 {
     maxHistoryItems = ui->spinMaxItems->value();
-    appVersion = ui->editVersion->text();
 }
 
 /****************************************************************
- * @brief Update UI widgets to reflect current settings.
+ * @brief Updates UI widgets to reflect current settings.
  ***************************************************************/
 void MainWindow::updateUiFromSettings()
 {
@@ -1013,61 +956,58 @@ void MainWindow::updateUiFromSettings()
     ui->spinMaxItems->setMaximum(std::numeric_limits<int>::max());
     ui->spinMaxItems->setToolTip(tr("-1 = unlimited, 0 not allowed, ≥1 valid"));
     ui->spinMaxItems->setValue(maxHistoryItems);
-
-    ui->editVersion->setToolTip(tr("Version string, no segment may be \"0\""));
-    ui->editVersion->setText(appVersion);
 }
 
 /****************************************************************
- * @brief Start matrix resolution.
+ * @brief Writes requirements into a one-column model.
  ***************************************************************/
-void MainWindow::startResolve()
+void MainWindow::writeTableToModel(const QStringList &lines)
 {
-    appendLog(tr("Starting matrix resolution..."));
-    if (resolver)
+    if (!requirementsModel || !requirementsView) { return; }
+    requirementsModel->clear();
+    requirementsModel->setColumnCount(1);
+    requirementsModel->setHorizontalHeaderLabels({tr("requirements.txt")});
+    requirementsView->resizeRowsToContents();
+
+    for (const QString &line : lines)
     {
-        resolver->start();
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty())
+        {
+            continue;
+        }
+        auto *item = new QStandardItem(trimmed);
+        item->setEditable(false);
+        requirementsModel->appendRow(item);
     }
+    requirementsView->resizeColumnsToContents();
+    requirementsView->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    requirementsView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    requirementsView->resizeColumnsToContents();
+    requirementsView->resizeRowsToContents();
+
+    // Get the actual width of requirementsView and add 66px
+    int reqWidth = requirementsView->verticalHeader()->width();
+    for (int col = 0; col < requirementsModel->columnCount(); ++col)
+    {
+        reqWidth += requirementsView->columnWidth(col);
+    }
+    reqWidth += 66;
+
+    // Set the splitter sizes
+    QSplitter *splitter = qobject_cast<QSplitter*>(requirementsView->parentWidget());
+    if (splitter)
+    {
+        QList<int> sizes;
+        sizes << reqWidth << qMax(100, splitter->width() - reqWidth);
+        splitter->setSizes(sizes);
+    }
+    refreshHistoryTables();
 }
 
 /****************************************************************
- * @brief Pause matrix resolution.
- ***************************************************************/
-void MainWindow::pauseResolve()
-{
-    appendLog(tr("Pausing..."));
-    if (resolver)
-    {
-        resolver->pause();
-    }
-}
-
-/****************************************************************
- * @brief Resume matrix resolution.
- ***************************************************************/
-void MainWindow::resumeResolve()
-{
-    appendLog(tr("Resuming..."));
-    if (resolver)
-    {
-        resolver->resume();
-    }
-}
-
-/****************************************************************
- * @brief Stop matrix resolution.
- ***************************************************************/
-void MainWindow::stopResolve()
-{
-    appendLog(tr("Stopping..."));
-    if (resolver)
-    {
-        resolver->stop();
-    }
-}
-
-/****************************************************************
- * @brief Append a line to the log view.
+ * @brief Appends a line to the log view with timestamp.
+ * @param line The message line to append.
  ***************************************************************/
 void MainWindow::appendLog(const QString &line)
 {
@@ -1076,7 +1016,8 @@ void MainWindow::appendLog(const QString &line)
 }
 
 /****************************************************************
- * @brief Update progress bar.
+ * @brief Updates progress bar percent.
+ * @param percent The progress value (0-100).
  ***************************************************************/
 void MainWindow::updateProgress(int percent)
 {
@@ -1084,7 +1025,8 @@ void MainWindow::updateProgress(int percent)
 }
 
 /****************************************************************
- * @brief Show compiled result message.
+ * @brief Shows compiled result message path.
+ * @param path The compiled output path.
  ***************************************************************/
 void MainWindow::showCompiledResult(const QString &path)
 {
@@ -1093,7 +1035,7 @@ void MainWindow::showCompiledResult(const QString &path)
 }
 
 /****************************************************************
- * @brief Show About dialog.
+ * @brief Shows About dialog using current appVersion.
  ***************************************************************/
 void MainWindow::showAboutBox()
 {
@@ -1108,13 +1050,12 @@ void MainWindow::showAboutBox()
 }
 
 /****************************************************************
- * @brief Show README dialog.
+ * @brief Shows README dialog from resources.
  ***************************************************************/
 void MainWindow::showReadmeDialog()
 {
     QFile file(":/docs/README.md");
     QString markdown;
-
     if (file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         markdown = QString::fromUtf8(file.readAll());
@@ -1137,68 +1078,775 @@ void MainWindow::showReadmeDialog()
     layout.addWidget(&viewer);
     layout.addWidget(&closeButton);
 
-    connect(&closeButton, &QPushButton::clicked,
-            &dialog, &QDialog::accept);
+    connect(&closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
 
     dialog.exec();
 }
 
 /****************************************************************
- * @brief Open matrix history tab.
+ * @brief Loads persistent history from QSettings.
  ***************************************************************/
-void MainWindow::openMatrixHistory()
+void MainWindow::loadHistory()
 {
-    ui->mainTabs->setCurrentWidget(ui->tabHistory);
+    QSettings s(kOrganizationName, kApplicationName);
+    historyRecentLocal = s.value("history/recentLocal").toStringList();
+    historyRecentWeb = s.value("history/recentWeb").toStringList();
+
+    if (maxHistoryItems != -1)
+    {
+        while (historyRecentLocal.size() > maxHistoryItems)
+        {
+            historyRecentLocal.removeLast();
+        }
+        while (historyRecentWeb.size() > maxHistoryItems)
+        {
+            historyRecentWeb.removeLast();
+        }
+    }
 }
 
 /****************************************************************
- * @brief apply Tools Enabled.
+ * @brief Saves persistent history to QSettings.
  ***************************************************************/
-void MainWindow::applyToolsEnabled(bool enabled)
+void MainWindow::saveHistory()
 {
-    ui->actionCreateVenv->setEnabled(enabled);
-    ui->actionResolveMatrix->setEnabled(enabled);
-    ui->actionPause->setEnabled(enabled);
-    ui->actionResume->setEnabled(enabled);
-    ui->actionStop->setEnabled(enabled);
-    ui->actionRunBatch->setEnabled(enabled);
+    QSettings s(kOrganizationName, kApplicationName);
+    s.setValue("history/recentLocal", historyRecentLocal);
+    s.setValue("history/recentWeb", historyRecentWeb);
 }
 
-/************************************************************
- * @brief Write requirements into a one-column model.
- ************************************************************/
-void MainWindow::writeTableToModel(const QStringList &lines)
+/****************************************************************
+ * @brief Normalizes a raw URL string.
+ ***************************************************************/
+QString MainWindow::normalizeRawUrl(const QString &inputUrl)
 {
-    if (!requirementsModel || !requirementsView) return;
+    QString url = inputUrl.trimmed();
+    if (!url.startsWith("http://") && !url.startsWith("https://"))
+    {
+        url.prepend("https://");
+    }
+    return url;
+}
 
-    requirementsModel->clear();
-    requirementsModel->setColumnCount(1);
-    requirementsModel->setHorizontalHeaderLabels({tr("requirements.txt")});
+/****************************************************************
+ * @brief Reads all lines from a text file.
+ ***************************************************************/
+QStringList MainWindow::readTextFileLines(const QString &path)
+{
+    QStringList lines;
+    QFile file(path);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        while (!file.atEnd())
+        {
+            lines << QString::fromUtf8(file.readLine()).trimmed();
+        }
+        file.close();
+    }
+    return lines;
+}
 
+/****************************************************************
+ * @brief Validates requirements.txt lines.
+ ***************************************************************/
+bool MainWindow::validateRequirementsWithErrors(const QStringList &lines, QStringList &errors)
+{
+    errors.clear();
+    bool valid = true;
     for (const QString &line : lines)
     {
-        const QString trimmed = line.trimmed();
-        if (trimmed.isEmpty()) continue;
-        auto *item = new QStandardItem(trimmed);
-        item->setEditable(false);
-        requirementsModel->appendRow(item);
+        if (line.isEmpty())
+        {
+            continue;
+        }
+        // Example validation: must not start with a dash or space
+        if (line.startsWith('-') || line.startsWith(' '))
+        {
+            errors << tr("Invalid line: %1").arg(line);
+            valid = false;
+        }
+        // Add more validation rules as needed
+    }
+    return valid;
+}
+
+/****************************************************************
+ * @brief Downloads text from a URL.
+ ***************************************************************/
+bool MainWindow::downloadText(const QString &url, QByteArray &out)
+{
+    QNetworkAccessManager manager;
+    QNetworkRequest request{QUrl(url)};
+    QNetworkReply *reply = manager.get(request);
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+    if (reply->error() != QNetworkReply::NoError)
+    {
+        reply->deleteLater();
+        return false;
+    }
+    out = reply->readAll();
+    reply->deleteLater();
+    return true;
+}
+
+/****************************************************************
+ * @brief Returns the logs directory path.
+ ***************************************************************/
+QString MainWindow::logsDir()
+{
+    QString dir = QDir::homePath() + "/PipMatrixResolverLogs";
+    QDir().mkpath(dir);
+    return dir;
+}
+
+/****************************************************************
+ * @brief Starts matrix resolution (stub).
+ ***************************************************************/
+void MainWindow::startResolve()
+{
+    appendLog(tr("Starting matrix resolution..."));
+    // Add your matrix resolution logic here
+}
+
+/****************************************************************
+ * @brief Pauses matrix resolution (stub).
+ ***************************************************************/
+void MainWindow::pauseResolve()
+{
+    appendLog(tr("Pausing..."));
+    // Add your pause logic here
+}
+
+/****************************************************************
+ * @brief Resumes matrix resolution (stub).
+ ***************************************************************/
+void MainWindow::resumeResolve()
+{
+    appendLog(tr("Resuming..."));
+    // Add your resume logic here
+}
+
+/****************************************************************
+ * @brief Stops matrix resolution (stub).
+ ***************************************************************/
+void MainWindow::stopResolve()
+{
+    appendLog(tr("Stopping..."));
+    // Add your stop logic here
+}
+
+/****************************************************************
+ * @brief Adds a new entry to the local history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_localAddButton_clicked()
+{
+    bool ok;
+    QString path = QInputDialog::getText(this, tr("Add Local File"), tr("File path:"), QLineEdit::Normal, "", &ok);
+    if (ok && !path.isEmpty())
+    {
+        QSettings s(kOrganizationName, kApplicationName);
+        QStringList list = s.value("history/recentLocal").toStringList();
+        list.prepend(path);
+        s.setValue("history/recentLocal", list);
+        refreshHistoryTables();
+    }
+}
+
+/****************************************************************
+ * @brief Edits the selected entry in the local history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_localEditButton_clicked()
+{
+    QModelIndex idx = localHistoryTable->currentIndex();
+    if (!idx.isValid()) return;
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentLocal").toStringList();
+    QString oldValue = list.at(idx.row());
+    bool ok;
+    QString newValue = QInputDialog::getText(this, tr("Edit Local File"), tr("File path:"), QLineEdit::Normal, oldValue, &ok);
+    if (!ok) return; // User cancelled, do nothing
+    if (newValue.isEmpty()) return; // Optionally, do nothing if empty
+    list[idx.row()] = newValue;
+    s.setValue("history/recentLocal", list);
+    refreshHistoryTables();
+}
+
+/****************************************************************
+ * @brief Deletes the selected entry from the local history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_localDeleteButton_clicked()
+{
+    QModelIndex idx = localHistoryTable->currentIndex();
+    if (!idx.isValid()) return;
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentLocal").toStringList();
+    list.removeAt(idx.row());
+    s.setValue("history/recentLocal", list);
+    refreshHistoryTables();
+}
+
+/****************************************************************
+ * @brief Moves the selected entry up in the local history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_localUpButton_clicked()
+{
+    QModelIndex idx = localHistoryTable->currentIndex();
+    if (!idx.isValid() || idx.row() == 0) return;
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentLocal").toStringList();
+    list.swapItemsAt(idx.row(), idx.row() - 1);
+    s.setValue("history/recentLocal", list);
+    refreshHistoryTables();
+    localHistoryTable->selectRow(idx.row() - 1);
+}
+
+/****************************************************************
+ * @brief Moves the selected entry down in the local history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_localDownButton_clicked()
+{
+    QModelIndex idx = localHistoryTable->currentIndex();
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentLocal").toStringList();
+    if (!idx.isValid() || idx.row() >= list.size() - 1) return;
+    list.swapItemsAt(idx.row(), idx.row() + 1);
+    s.setValue("history/recentLocal", list);
+    refreshHistoryTables();
+    localHistoryTable->selectRow(idx.row() + 1);
+}
+
+/****************************************************************
+ * @brief Adds a new entry to the web history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_webAddButton_clicked()
+{
+    bool ok;
+    QString url = QInputDialog::getText(this, tr("Add Web URL"), tr("URL:"), QLineEdit::Normal, "", &ok);
+    if (ok && !url.isEmpty())
+    {
+        QSettings s(kOrganizationName, kApplicationName);
+        QStringList list = s.value("history/recentWeb").toStringList();
+        list.prepend(url);
+        s.setValue("history/recentWeb", list);
+        refreshHistoryTables();
+    }
+}
+
+/****************************************************************
+ * @brief Edits the selected entry in the web history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_webEditButton_clicked()
+{
+    QModelIndex idx = webHistoryTable->currentIndex();
+    if (!idx.isValid()) return;
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentWeb").toStringList();
+    QString oldValue = list.at(idx.row());
+    bool ok;
+    QString newValue = QInputDialog::getText(this, tr("Edit Web URL"), tr("URL:"), QLineEdit::Normal, oldValue, &ok);
+    if (!ok) return; // User cancelled, do nothing
+    if (newValue.isEmpty()) return; // Optionally, do nothing if empty
+    list[idx.row()] = newValue;
+    s.setValue("history/recentWeb", list);
+    refreshHistoryTables();
+}
+/****************************************************************
+ * @brief Deletes the selected entry from the web history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_webDeleteButton_clicked()
+{
+    QModelIndex idx = webHistoryTable->currentIndex();
+    if (!idx.isValid()) return;
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentWeb").toStringList();
+    list.removeAt(idx.row());
+    s.setValue("history/recentWeb", list);
+    refreshHistoryTables();
+}
+
+/****************************************************************
+ * @brief Moves the selected entry up in the web history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_webUpButton_clicked()
+{
+    QModelIndex idx = webHistoryTable->currentIndex();
+    if (!idx.isValid() || idx.row() == 0) return;
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentWeb").toStringList();
+    list.swapItemsAt(idx.row(), idx.row() - 1);
+    s.setValue("history/recentWeb", list);
+    refreshHistoryTables();
+    webHistoryTable->selectRow(idx.row() - 1);
+}
+
+/****************************************************************
+ * @brief Moves the selected entry down in the web history table and QSettings.
+ ***************************************************************/
+void MainWindow::on_webDownButton_clicked()
+{
+    QModelIndex idx = webHistoryTable->currentIndex();
+    QSettings s(kOrganizationName, kApplicationName);
+    QStringList list = s.value("history/recentWeb").toStringList();
+    if (!idx.isValid() || idx.row() >= list.size() - 1) return;
+    list.swapItemsAt(idx.row(), idx.row() + 1);
+    s.setValue("history/recentWeb", list);
+    refreshHistoryTables();
+    webHistoryTable->selectRow(idx.row() + 1);
+}
+
+/****************************************************************
+ * @brief Enables/disables local history buttons based on selection and table size.
+ ***************************************************************/
+void MainWindow::updateLocalHistoryButtons()
+{
+    QItemSelectionModel *sel = localHistoryTable->selectionModel();
+    int rowCount = localHistoryModel->rowCount();
+    bool hasSelection = sel->hasSelection();
+
+    ui->localEditButton->setEnabled(hasSelection);
+    ui->localDeleteButton->setEnabled(hasSelection);
+
+    // Up: enabled if selected and not first row, and more than 1 item
+    bool canUp = hasSelection && rowCount > 1;
+    if (canUp)
+    {
+        QModelIndex idx = sel->currentIndex();
+        canUp = idx.isValid() && idx.row() > 0;
+    }
+    ui->localUpButton->setEnabled(canUp);
+
+    // Down: enabled if selected and not last row, and more than 1 item
+    bool canDown = hasSelection && rowCount > 1;
+    if (canDown)
+    {
+        QModelIndex idx = sel->currentIndex();
+        canDown = idx.isValid() && idx.row() < rowCount - 1;
+    }
+    ui->localDownButton->setEnabled(canDown);
+}
+
+/****************************************************************
+ * @brief Enables/disables web history buttons based on selection and table size.
+ ***************************************************************/
+void MainWindow::updateWebHistoryButtons()
+{
+    QItemSelectionModel *sel = webHistoryTable->selectionModel();
+    int rowCount = webHistoryModel->rowCount();
+    bool hasSelection = sel->hasSelection();
+
+    ui->webEditButton->setEnabled(hasSelection);
+    ui->webDeleteButton->setEnabled(hasSelection);
+
+    // Up: enabled if selected and not first row, and more than 1 item
+    bool canUp = hasSelection && rowCount > 1;
+    if (canUp)
+    {
+        QModelIndex idx = sel->currentIndex();
+        canUp = idx.isValid() && idx.row() > 0;
+    }
+    ui->webUpButton->setEnabled(canUp);
+
+    // Down: enabled if selected and not last row, and more than 1 item
+    bool canDown = hasSelection && rowCount > 1;
+    if (canDown)
+    {
+        QModelIndex idx = sel->currentIndex();
+        canDown = idx.isValid() && idx.row() < rowCount - 1;
+    }
+    ui->webDownButton->setEnabled(canDown);
+}
+
+/****************************************************************
+ * @brief save Settings.
+ ***************************************************************/
+void MainWindow::saveSettings()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+    s.setValue("settings/pythonVersion", ui->pythonVersionEdit->text());
+    s.setValue("settings/pipVersion", ui->pipVersionEdit->text());
+    s.setValue("settings/pipToolsVersion", ui->pipToolsVersionEdit->text());
+    s.setValue("settings/maxItems", ui->spinMaxItems->value());
+    s.setValue("settings/useCpu", useCpuCheckBox->isChecked());
+    s.setValue("settings/cuda", cudaCheckBox->isChecked());
+}
+
+/****************************************************************
+ * @brief check And Restore Settings.
+ ***************************************************************/
+void MainWindow::checkAndRestoreSettings()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+
+    // Python version
+    QString pythonVersion = s.value("settings/pythonVersion", DEFAULT_PYTHON_VERSION).toString();
+    if (pythonVersion.isEmpty())
+    {
+        pythonVersion = DEFAULT_PYTHON_VERSION;
+        s.setValue("settings/pythonVersion", pythonVersion);
+    }
+    ui->pythonVersionEdit->setText(pythonVersion);
+
+    // pip version
+    QString pipVersion = s.value("settings/pipVersion", DEFAULT_PIP_VERSION).toString();
+    if (pipVersion.isEmpty())
+    {
+        pipVersion = DEFAULT_PIP_VERSION;
+        s.setValue("settings/pipVersion", pipVersion);
+    }
+    ui->pipVersionEdit->setText(pipVersion);
+
+    // pip-tools version
+    QString pipToolsVersion = s.value("settings/pipToolsVersion", DEFAULT_PIPTOOLS_VERSION).toString();
+    if (pipToolsVersion.isEmpty())
+    {
+        pipToolsVersion = DEFAULT_PIPTOOLS_VERSION;
+        s.setValue("settings/pipToolsVersion", pipToolsVersion);
+    }
+    ui->pipToolsVersionEdit->setText(pipToolsVersion);
+
+    // Max items
+    int maxItems = s.value("settings/maxItems", DEFAULT_MAX_ITEMS).toInt();
+    if (maxItems == 0)
+    {
+        maxItems = DEFAULT_MAX_ITEMS;
+        s.setValue("settings/maxItems", maxItems);
+    }
+    ui->spinMaxItems->setValue(maxItems);
+}
+
+/****************************************************************
+ * @brief Restores CPU and Cuda settings from QSettings to UI.
+ ***************************************************************/
+void MainWindow::restoreCpuCudaSettings()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+    ui->useCpuCheckBox->setChecked(s.value("settings/useCpu", false).toBool());
+    ui->cudaCheckBox->setChecked(s.value("settings/cuda", true).toBool());
+}
+
+/****************************************************************
+ * @brief Detect OS System.
+ ***************************************************************/
+void MainWindow::detectSystem()
+{
+    // GPU detection (simple: check for NVIDIA)
+    bool gpuDetected = false;
+    QString os, release, version;
+#if defined(Q_OS_WIN)
+    os = "Windows";
+    release = QSysInfo::productType();
+    version = QSysInfo::productVersion();
+#elif defined(Q_OS_MAC)
+    os = "Mac";
+    release = QSysInfo::productType();
+    version = QSysInfo::productVersion();
+#elif defined(Q_OS_LINUX)
+    os = "Linux";
+    QFile f("/etc/os-release");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        while (!f.atEnd()) {
+            QString line = f.readLine();
+            if (line.startsWith("ID=")) release = line.mid(3).trimmed().replace("\"", "");
+            if (line.startsWith("VERSION_ID=")) version = line.mid(11).trimmed().replace("\"", "");
+        }
+    }
+#endif
+    osEdit->setText(os);
+    osReleaseEdit->setText(release);
+    osVersionEdit->setText(version);
+
+#if defined(Q_OS_WIN)
+    QProcess proc;
+    proc.start("wmic path win32_VideoController get name");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+#elif defined(Q_OS_LINUX)
+    QProcess proc;
+    proc.start("lspci");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+#elif defined(Q_OS_MAC)
+    QProcess proc;
+    proc.start("system_profiler SPDisplaysDataType");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+#endif
+    gpuDetected = detectNvidiaGpu();
+    ui->gpuDetectedCheckBox->setChecked(gpuDetected);
+
+    // Save to QSettings
+    QSettings s(kOrganizationName, kApplicationName);
+    s.setValue("settings/os", os);
+    s.setValue("settings/osRelease", release);
+    s.setValue("settings/osVersion", version);
+    s.setValue("settings/gpuDetected", gpuDetected);
+}
+
+/****************************************************************
+ * @brief on Create Venv.
+ ***************************************************************/
+void MainWindow::onCreateVenv()
+{
+    // Check if python, pip, or pip-tools settings have changed
+    // If so, rebuild venv_running
+    // (You can compare current settings to those saved in QSettings)
+
+    // Call your bash script using QProcess
+    QProcess proc;
+    QString script = "/path/to/pip-matrix-common.sh";
+    QStringList args;
+    args << "--create-venv-running"; // You can define this flag in your script
+    proc.start(script, args);
+    proc.waitForFinished(-1);
+    QString output = proc.readAllStandardOutput();
+    QMessageBox::information(this, tr("Create venv_running"), output);
+}
+
+/****************************************************************
+ * @brief Sets up venv_running and venv_testing paths and saves to QSettings.
+ ***************************************************************/
+void MainWindow::setupVenvPaths()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+    QString projectRoot = QDir::currentPath();
+    QString venvRunning = projectRoot + "/.venvs/venv_running";
+    QString venvTesting = projectRoot + "/.venvs/venv_testing";
+    s.setValue("venv/venv_running", venvRunning);
+    s.setValue("venv/venv_testing", venvTesting);
+}
+
+/****************************************************************
+ * @brief detect Gpu Via PowerShell.
+ ***************************************************************/
+bool MainWindow::detectGpuViaPowerShell()
+{
+    QProcess proc;
+    proc.start("powershell", QStringList() << "-Command" << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    // Debug: print output if needed
+    // QMessageBox::information(nullptr, "PowerShell GPU Output", output);
+    return output.contains("NVIDIA", Qt::CaseInsensitive);
+}
+
+/****************************************************************
+ * @brief detect Gpu Via DxDiag.
+ ***************************************************************/
+bool MainWindow::detectGpuViaDxDiag()
+{
+    QProcess proc;
+    proc.start("cmd", QStringList() << "/c" << "dxdiag /t dxdiag.txt");
+    proc.waitForFinished();
+    QFile file("dxdiag.txt");
+    bool found = false;
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString dxdiagOutput = file.readAll();
+        found = dxdiagOutput.contains("NVIDIA", Qt::CaseInsensitive);
+        file.remove(); // Clean up
+    }
+    // Debug: print output if needed
+    // QMessageBox::information(nullptr, "dxdiag GPU Output", dxdiagOutput);
+    return found;
+}
+
+/****************************************************************
+ * @brief detect Gpu Via Nvidia Smi.
+ ***************************************************************/
+bool MainWindow::detectGpuViaNvidiaSmi()
+{
+    QProcess proc;
+    proc.start("nvidia-smi");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    // Debug: print output if needed
+    // QMessageBox::information(nullptr, "nvidia-smi Output", output);
+    return output.contains("NVIDIA", Qt::CaseInsensitive);
+}
+
+/****************************************************************
+ * @brief detect Nvidia Gpu.
+ ***************************************************************/
+bool MainWindow::detectNvidiaGpu()
+{
+    // Primary test: PowerShell WMI
+    if (detectGpuViaPowerShell()) return true;
+    // Fallback 1: dxdiag
+    if (detectGpuViaDxDiag()) return true;
+    // Fallback 2: nvidia-smi
+    if (detectGpuViaNvidiaSmi()) return true;
+    // Not detected
+    return false;
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::onRunCommand()
+{
+    QString command = ui->commandInput->text().trimmed();
+    if (command.isEmpty()) {
+        ui->terminalOutput->appendPlainText("No command entered.");
+        return;
     }
 
-    // Resize columns to fit contents
-    requirementsView->resizeColumnsToContents();
-    requirementsView->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
 
-    // Optionally, allow user to stretch columns interactively
-    requirementsView->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    QStringList args;
+    bool usedVenv = false;
+
+    if (command.startsWith("pip ")) {
+        args << "-m" << "pip";
+        args << command.mid(4).split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else if (command.startsWith("pip-compile")) {
+        args << "-m" << "piptools" << "compile";
+        QString rest = command.mid(QString("pip-compile").length()).trimmed();
+        if (!rest.isEmpty()) args << rest.split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else if (command.startsWith("pip-sync")) {
+        args << "-m" << "piptools" << "sync";
+        QString rest = command.mid(QString("pip-sync").length()).trimmed();
+        if (!rest.isEmpty()) args << rest.split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else if (command.startsWith("python ")) {
+        args = command.mid(7).split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else {
+#if defined(Q_OS_WIN)
+        process.start("cmd.exe", QStringList() << "/C" << command);
+#else
+        process.start("bash", QStringList() << "-c" << command);
+#endif
+    }
+
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+
+    if (usedVenv)
+        ui->terminalOutput->appendPlainText("[venv] " + command);
+
+    if (!output.isEmpty())
+        ui->terminalOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->terminalOutput->appendPlainText("[ERROR] " + error);
 }
 
-/************************************************************
- * @brief Exit App.
- ************************************************************/
-void MainWindow::exitApp()
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::onClearTerminal()
 {
-    QApplication::quit();
+    ui->terminalOutput->clear();
 }
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::onSearchPackage()
+{
+    QString pkg = ui->packageNameInput->text().trimmed();
+    if (pkg.isEmpty()) {
+        ui->packageOutput->appendPlainText("Enter a package name to search.");
+        return;
+    }
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "search", pkg};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+    if (!output.isEmpty())
+        ui->packageOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->packageOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::onInstallPackage()
+{
+    QString pkg = ui->packageNameInput->text().trimmed();
+    if (pkg.isEmpty()) {
+        ui->packageOutput->appendPlainText("Enter a package name to install.");
+        return;
+    }
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "install", pkg};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+    if (!output.isEmpty())
+        ui->packageOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->packageOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::onUninstallPackage()
+{
+    QString pkg = ui->packageNameInput->text().trimmed();
+    if (pkg.isEmpty()) {
+        ui->packageOutput->appendPlainText("Enter a package name to uninstall.");
+        return;
+    }
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "uninstall", "-y", pkg};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+    if (!output.isEmpty())
+        ui->packageOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->packageOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+
 /************** End of MainWindow.cpp **************************/
 
 #-------------------------------------------------------------------------------
@@ -1214,73 +1862,34 @@ void MainWindow::exitApp()
  * @section License Unlicensed, MIT, or any.
  * @section DESCRIPTION
  * Main window interface for PipMatrixResolver Qt application.
- * Includes forward declarations, settings API, history, menus,
- * and shared loaders for files and URLs. Uses C-style braces.
+ * Includes settings API, history, menus, and shared loaders for
+ * files and URLs. Uses C-style braces.
  ***************************************************************/
 
 #pragma once
-
 #include <QMainWindow>
 #include <QStringList>
 #include <QTimer>
-#include "ResolverEngine.h"
-#include "VenvManager.h"
-#include "BatchRunner.h"
-#include "MatrixHistory.h"
-
-/****************************************************************
- * @class ResolverEngine
- * @brief Forward declaration for resolver engine.
- ***************************************************************/
-class ResolverEngine;
-
-/****************************************************************
- * @class VenvManager
- * @brief Forward declaration for venv manager.
- ***************************************************************/
-class VenvManager;
-
-/****************************************************************
- * @class BatchRunner
- * @brief Forward declaration for batch runner.
- ***************************************************************/
-class BatchRunner;
-
-/****************************************************************
- * @class MatrixHistory
- * @brief Forward declaration for history widget.
- ***************************************************************/
-class MatrixHistory;
-
-/****************************************************************
- * @class QStandardItemModel
- * @brief Forward declaration for model.
- ***************************************************************/
-class QStandardItemModel;
-
-/****************************************************************
- * @class QPlainTextEdit
- * @brief Forward declaration for log view.
- ***************************************************************/
-class QPlainTextEdit;
-
-/****************************************************************
- * @class QProgressBar
- * @brief Forward declaration for progress bar.
- ***************************************************************/
-class QProgressBar;
-
-/****************************************************************
- * @class QTableView
- * @brief Forward declaration for table view.
- ***************************************************************/
-class QTableView;
-
-/****************************************************************
- * @class QMenu
- * @brief Forward declaration for menu.
- ***************************************************************/
-class QMenu;
+#include <QStandardItemModel>
+#include <QTableView>
+#include <QPlainTextEdit>
+#include <QProgressBar>
+#include <QMenu>
+#include <QAction>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QFile>
+#include <QDir>
+#include <QFileInfo>
+#include <QByteArray>
+#include <QDialog>
+#include <QTextBrowser>
+#include <QVBoxLayout>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QSettings>
+#include <QDateTime>
+#include <QDebug>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -1288,199 +1897,136 @@ QT_END_NAMESPACE
 
 /****************************************************************
  * @class MainWindow
- * @brief Central application window for PipMatrixResolver.
+ * @brief Implements the main application window.
  ***************************************************************/
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
-
 public:
-    /************************************************************
-     * @brief Construct the main window.
-     * @param parent Parent widget pointer.
-     ***********************************************************/
     explicit MainWindow(QWidget *parent = nullptr);
-
-    /************************************************************
-     * @brief Destroy the main window.
-     ***********************************************************/
     ~MainWindow();
 
+    // QSettings
+    static const QString kOrganizationName;
+    static const QString kApplicationName;
+    // Globals
+    static QString appVersion;
+
 private slots:
-    /************************************************************
-     * @brief Open requirements from a local file via dialog.
-     ***********************************************************/
     void openLocalRequirements();
-
-    /************************************************************
-     * @brief Fetch requirements from a URL via dialog.
-     ***********************************************************/
     void fetchRequirementsFromUrl();
-
-    /************************************************************
-     * @brief Refresh recent menus for local and web items.
-     ***********************************************************/
     void refreshRecentMenus();
-
-    /************************************************************
-     * @brief Clear both local and web recent history lists.
-     ***********************************************************/
     void clearAllHistory();
-
-    /************************************************************
-     * @brief Load application settings from QSettings to UI.
-     ***********************************************************/
     void loadAppSettings();
-
-    /************************************************************
-     * @brief Save application settings from UI to QSettings.
-     ***********************************************************/
     void saveAppSettings();
-
-    /************************************************************
-     * @brief Validate and clamp settings to safe ranges.
-     ***********************************************************/
     void validateAppSettings();
-
-    /************************************************************
-     * @brief Apply settings from UI widgets to member state.
-     ***********************************************************/
     void applySettingsFromUi();
-
-    /************************************************************
-     * @brief Update UI widgets to reflect current settings.
-     ***********************************************************/
     void updateUiFromSettings();
-
-    /************************************************************
-     * @brief Start matrix resolution (existing behavior).
-     ***********************************************************/
     void startResolve();
-
-    /************************************************************
-     * @brief Pause matrix resolution (existing behavior).
-     ***********************************************************/
     void pauseResolve();
-
-    /************************************************************
-     * @brief Resume matrix resolution (existing behavior).
-     ***********************************************************/
     void resumeResolve();
-
-    /************************************************************
-     * @brief Stop matrix resolution (existing behavior).
-     ***********************************************************/
     void stopResolve();
-
-    /************************************************************
-     * @brief Append a line to the log view with timestamp.
-     * @param line The message line to append.
-     ***********************************************************/
     void appendLog(const QString &line);
-
-    /************************************************************
-     * @brief Update progress bar percent.
-     * @param percent The progress value (0-100).
-     ***********************************************************/
     void updateProgress(int percent);
-
-    /************************************************************
-     * @brief Show compiled result message path.
-     * @param path The compiled output path.
-     ***********************************************************/
     void showCompiledResult(const QString &path);
-
-    /************************************************************
-     * @brief Show About dialog using current appVersion.
-     ***********************************************************/
     void showAboutBox();
-
-    /************************************************************
-     * @brief Show README dialog from resources.
-     ***********************************************************/
     void showReadmeDialog();
-
-    /************************************************************
-     * @brief Navigate to MatrixHistory tab in main UI.
-     ***********************************************************/
-    void openMatrixHistory();
-
-    /************************************************************
-     * @brief Called once after construction to finalize setup.
-     ***********************************************************/
-    void onInitialized();
-
-    /************************************************************
-     * @brief Exit App.
-     ***********************************************************/
     void exitApp();
-
-private:
-    /************************************************************
-     * @brief Load requirements directly from file path.
-     * @param path Absolute or canonical file path.
-     ***********************************************************/
-    void loadRequirementsFromFile(const QString &path);
-
-    /************************************************************
-     * @brief Load requirements directly from URL.
-     * @param url Normalized URL string.
-     ***********************************************************/
-    void loadRequirementsFromUrl(const QString &url);
-
-    /************************************************************
-     * @brief Save recent history lists to QSettings.
-     ***********************************************************/
-    void saveHistory();
-
-    /************************************************************
-     * @brief Load recent history lists from QSettings.
-     ***********************************************************/
-    void loadHistory();
-
-    /************************************************************
-     * @brief apply Tools Enabled.
-     ***********************************************************/
-    void applyToolsEnabled(bool enabled);
-
-    /************************************************************
-     * @brief Ensure requirementsView is scrollable and sized.
-     ***********************************************************/
-    void ensureViewScrollable();
-
-    /************************************************************
-     * @brief Write requirements into a one-column model.
-     ************************************************************/
     void writeTableToModel(const QStringList &lines);
+    // Local history slots
+    void on_localAddButton_clicked();
+    void on_localEditButton_clicked();
+    void on_localDeleteButton_clicked();
+    void on_localUpButton_clicked();
+    void on_localDownButton_clicked();
+
+    // Web history slots
+    void on_webAddButton_clicked();
+    void on_webEditButton_clicked();
+    void on_webDeleteButton_clicked();
+    void on_webUpButton_clicked();
+    void on_webDownButton_clicked();
+
+    void updateLocalHistoryButtons();
+    void updateWebHistoryButtons();
+    // Slot for menu action
+    void onCreateVenv();
+
+    void onRunCommand();
+    void onClearTerminal();
+
+    // Package Manager tab
+    void onSearchPackage();
+    void onInstallPackage();
+    void onUninstallPackage();
 
 private:
-    Ui::MainWindow *ui;
+    void loadRequirementsFromFile(const QString &path);
+    void loadRequirementsFromUrl(const QString &url);
+    void saveHistory();
+    void loadHistory();
+    /****************************************************************
+     * @brief Populates the local and web history tables in the
+     *        History tab with the current history data.
+     ***************************************************************/
+    void refreshHistoryTables();
+    /****************************************************************
+    * @brief Checks all settings in the Settings tab at startup,
+    *        restores defaults if missing, and updates the UI.
+    ***************************************************************/
+    void checkAndRestoreSettings();
 
-    // Engines
-    ResolverEngine *resolver;
-    VenvManager *venv;
-    BatchRunner *batch;
+    bool detectGpuViaPowerShell();
+    bool detectNvidiaGpu();
+    bool detectGpuViaNvidiaSmi();
+    bool detectGpuViaDxDiag();
+    /****************************************************************
+    * @brief Saves all settings from the Settings tab to QSettings.
+    ***************************************************************/
+    void saveSettings();
+    // Startup/system functions
+    void detectSystem();
+    void restoreCpuCudaSettings();
+    void setupVenvPaths();
 
-    // Models/Views
-    QStandardItemModel *requirementsModel;
-    QTableView *requirementsView;
-    QPlainTextEdit *logView;
-    QProgressBar *progress;
+    // Utility functions moved from MatrixUtility
+    QStringList readTextFileLines(const QString &path);
+    bool validateRequirementsWithErrors(const QStringList &lines, QStringList &errors);
+    QString normalizeRawUrl(const QString &inputUrl);
+    bool downloadText(const QString &url, QByteArray &out);
+    QString logsDir();
 
-    // Menus
-    QMenu *recentLocalMenu;
-    QMenu *recentWebMenu;
-
-    // History widget
-    MatrixHistory *historyWidget;
-
-    // State
+    // History data
     QStringList historyRecentLocal;
     QStringList historyRecentWeb;
 
+    // UI pointers
+    Ui::MainWindow *ui;
+    QStandardItemModel *requirementsModel;
+    QTableView *requirementsView;
+    QPlainTextEdit *logView;
+    QTableView *localHistoryTable;
+    QTableView *webHistoryTable;
+    QStandardItemModel *localHistoryModel;
+    QStandardItemModel *webHistoryModel;
+    QProgressBar *progress;
+    QMenu *recentLocalMenu;
+    QMenu *recentWebMenu;
+
+    // Settings tab widgets
+    QCheckBox *gpuDetectedCheckBox;
+    QCheckBox *useCpuCheckBox;
+    QCheckBox *cudaCheckBox;
+    QLineEdit *osEdit;
+    QLineEdit *osReleaseEdit;
+    QLineEdit *osVersionEdit;
+
+    // Venv paths
+    QString venvRunningPath;
+    QString venvTestingPath;
+
     // Settings
-    int maxHistoryItems;     // -1=unlimited, 0 invalid, ≥1 valid
-    QString appVersion;
+    int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
 };
 
 /************** End of MainWindow.h **************************/
@@ -1545,7 +2091,119 @@ private:
        </attribute>
        <layout class="QVBoxLayout" name="historyLayout">
         <item>
-         <widget class="MatrixHistory" name="matrixHistoryWidget" native="true"/>
+         <widget class="QTableView" name="localHistoryTable"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="localHistoryButtonBar">
+          <item>
+           <widget class="QPushButton" name="localAddButton">
+            <property name="text">
+             <string>Add</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localEditButton">
+            <property name="text">
+             <string>Edit</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localDeleteButton">
+            <property name="text">
+             <string>Delete</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localUpButton">
+            <property name="text">
+             <string>Up</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localDownButton">
+            <property name="text">
+             <string>Down</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QTableView" name="webHistoryTable"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="webHistoryButtonBar">
+          <item>
+           <widget class="QPushButton" name="webAddButton">
+            <property name="text">
+             <string>Add</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webEditButton">
+            <property name="text">
+             <string>Edit</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webDeleteButton">
+            <property name="text">
+             <string>Delete</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webUpButton">
+            <property name="text">
+             <string>Up</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webDownButton">
+            <property name="text">
+             <string>Down</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabTerminal">
+       <attribute name="title">
+        <string>Terminal</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_terminal">
+        <item>
+         <widget class="QPlainTextEdit" name="terminalOutput"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_terminal">
+          <item>
+           <widget class="QLineEdit" name="commandInput"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runCommandBtn">
+            <property name="text">
+             <string>Run Command</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="clearTerminalBtn">
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
        </layout>
       </widget>
@@ -1594,35 +2252,114 @@ private:
            </widget>
           </item>
           <item row="3" column="1">
-           <widget class="QSpinBox" name="spinMaxItems">
-            <property name="toolTip">
-             <string>-1 = unlimited, 0 not allowed, ≥1 valid</string>
-            </property>
-            <property name="minimum">
-             <number>-1</number>
-            </property>
-            <property name="maximum">
-             <number>2147483647</number>
-            </property>
-            <property name="value">
-             <number>10</number>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="spinMaxItemsLayout">
+            <item>
+             <widget class="QSpinBox" name="spinMaxItems">
+              <property name="toolTip">
+               <string>-1 = unlimited, 0 not allowed, ≥1 valid</string>
+              </property>
+              <property name="minimum">
+               <number>-1</number>
+              </property>
+              <property name="maximum">
+               <number>2147483647</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="spinMaxItemsSpacer">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Policy::Expanding</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
           <item row="4" column="0">
-           <widget class="QLabel" name="labelAppVersion">
+           <widget class="QLabel" name="labelGpuDetected">
             <property name="text">
-             <string>App version:</string>
+             <string>GPU Detected:</string>
             </property>
            </widget>
           </item>
           <item row="4" column="1">
-           <widget class="QLineEdit" name="editVersion">
-            <property name="toolTip">
-             <string>Version string, no segment may be &quot;0&quot;</string>
+           <widget class="QCheckBox" name="gpuDetectedCheckBox">
+            <property name="enabled">
+             <bool>false</bool>
             </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="labelUseCpu">
             <property name="text">
-             <string>1.0</string>
+             <string>Use CPU:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QCheckBox" name="useCpuCheckBox"/>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="labelCuda">
+            <property name="text">
+             <string>Cuda:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QCheckBox" name="cudaCheckBox"/>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="labelOs">
+            <property name="text">
+             <string>OS:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QLineEdit" name="osEdit">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="labelOsRelease">
+            <property name="text">
+             <string>Release:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QLineEdit" name="osReleaseEdit">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="0">
+           <widget class="QLabel" name="labelOsVersion">
+            <property name="text">
+             <string>Version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1">
+           <widget class="QLineEdit" name="osVersionEdit">
+            <property name="readOnly">
+             <bool>true</bool>
             </property>
            </widget>
           </item>
@@ -1670,7 +2407,6 @@ private:
     </property>
     <addaction name="actionOpenRequirements"/>
     <addaction name="actionFetchRequirements"/>
-    <addaction name="actionOpenHistory"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
@@ -1740,11 +2476,6 @@ private:
    </property>
    <property name="text">
     <string>Fetch requirements from URL...</string>
-   </property>
-  </action>
-  <action name="actionOpenHistory">
-   <property name="text">
-    <string>Open History</string>
    </property>
   </action>
   <action name="actionExit">
@@ -1829,427 +2560,12 @@ private:
     <bool>true</bool>
    </property>
   </action>
-  <action name="menuRecentLocal">
-   <property name="text">
-    <string>Recent Local</string>
-   </property>
-  </action>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>MatrixHistory</class>
-   <extends>QWidget</extends>
-   <header>MatrixHistory.h</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
  <resources>
   <include location="../PipMatrixResolverQt.qrc"/>
  </resources>
  <connections/>
 </ui>
-
-#-------------------------------------------------------------------------------
-# File: src/MatrixHistory.cpp
-#-------------------------------------------------------------------------------
-/****************************************************************
- * @file MatrixHistory.cpp
- * @brief Implements the MatrixHistory widget for
- *        PipMatrixResolverQt.
- *
- * @author Jeffrey
- * @version 0.6
- * @date    2025-11-01
- * @section License Unlicensed, MIT, or any.
- * @section DESCRIPTION
- * Provides a widget to display and manage recent requirements
- * history (local and web). Emits signals when history changes.
- ***************************************************************/
-
-#include "MatrixHistory.h"
-
-#include <QListWidget>
-#include <QVBoxLayout>
-
-/****************************************************************
- * @brief Constructor.
- ***************************************************************/
-MatrixHistory::MatrixHistory(QWidget *parent)
-    : QWidget(parent),
-    listWidget(new QListWidget(this))
-{
-    auto *layout = new QVBoxLayout(this);
-    layout->addWidget(listWidget);
-    setLayout(layout);
-}
-
-/****************************************************************
- * @brief Destructor.
- ***************************************************************/
-MatrixHistory::~MatrixHistory() = default;
-
-/****************************************************************
- * @brief Set the history list to display.
- ***************************************************************/
-void MatrixHistory::setHistory(const QStringList &history)
-{
-    if (history == currentHistory)
-    {
-        return;
-    }
-
-    currentHistory = history;
-    rebuildList();
-    emit historyChanged();
-}
-
-/****************************************************************
- * @brief Get the current history list.
- ***************************************************************/
-QStringList MatrixHistory::history() const
-{
-    return currentHistory;
-}
-
-/****************************************************************
- * @brief Rebuild the list widget from current history.
- ***************************************************************/
-void MatrixHistory::rebuildList()
-{
-    listWidget->clear();
-    for (int i = 0; i < currentHistory.size(); ++i)
-    {
-        listWidget->addItem(currentHistory.at(i));
-    }
-}
-
-/************** End of MatrixHistory.cpp **************************/
-
-#-------------------------------------------------------------------------------
-# File: src/MatrixHistory.h
-#-------------------------------------------------------------------------------
-/****************************************************************
- * @file MatrixHistory.h
- * @brief Declares the MatrixHistory widget for
- *        PipMatrixResolverQt.
- *
- * @author Jeffrey
- * @version 0.6
- * @date    2025-11-01
- * @section License Unlicensed, MIT, or any.
- * @section DESCRIPTION
- * Provides a widget to display and manage recent requirements
- * history (local and web). Emits signals when history changes.
- ***************************************************************/
-
-#pragma once
-
-#include <QWidget>
-#include <QStringList>
-
-QT_BEGIN_NAMESPACE
-class QListWidget;
-QT_END_NAMESPACE
-
-/****************************************************************
- * @class MatrixHistory
- * @brief Widget for displaying and managing requirements
- *        history.
- ***************************************************************/
-class MatrixHistory : public QWidget
-{
-    Q_OBJECT
-
-public:
-    explicit MatrixHistory(QWidget *parent = nullptr);
-    ~MatrixHistory();
-
-    /************************************************************
-     * @brief Set the history list to display.
-     * @param history Combined list of local and web entries.
-     ************************************************************/
-    void setHistory(const QStringList &history);
-
-    /************************************************************
-     * @brief Get the current history list.
-     * @return QStringList of history entries.
-     ************************************************************/
-    QStringList history() const;
-
-signals:
-    /************************************************************
-     * @brief Emitted when the history list changes.
-     ************************************************************/
-    void historyChanged();
-
-private:
-    QListWidget *listWidget;
-    QStringList currentHistory;
-
-    void rebuildList();
-};
-
-/************** End of MatrixHistory.h **************************/
-
-#-------------------------------------------------------------------------------
-# File: src/MatrixUtility.cpp
-#-------------------------------------------------------------------------------
-/****************************************************************
- * @file MatrixUtility.cpp
- * @brief Implementation of utility functions for
- *        PipMatrixResolverQt.
- *
- * @author Jeffrey
- * @version 0.4
- * @date    2025-11-01
- * @section License Unlicensed, MIT, or any.
- * @section DESCRIPTION
- * Implements helpers for reading requirements files, writing
- * them into models, validating entries, ensuring view
- * scrollability, and downloading text resources.
- ***************************************************************/
-
-#include "MatrixUtility.h"
-
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QStandardItemModel>
-#include <QStandardItem>
-#include <QScrollBar>
-#include <QUrl>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QEventLoop>
-#include <QRegularExpression>
-#include <QTableView>
-#include <QDebug>
-
-/************************************************************
- * @brief Return logs directory, create if missing.
- ************************************************************/
-QString MatrixUtility::logsDir()
-{
-    QDir dir("logs");
-    if (!dir.exists())
-    {
-        dir.mkpath(".");
-    }
-    return dir.absolutePath();
-}
-
-/************************************************************
- * @brief Return history directory, create if missing.
- ************************************************************/
-QString MatrixUtility::historyDir()
-{
-    QDir dir("requirement-history");
-    if (!dir.exists())
-    {
-        dir.mkpath(".");
-    }
-    return dir.absolutePath();
-}
-
-/************************************************************
- * @brief Normalize GitHub blob URLs to raw URLs.
- ************************************************************/
-QString MatrixUtility::normalizeRawUrl(const QString &url)
-{
-    const QUrl u(url);
-    const QString host = u.host().toLower();
-    if (host == "github.com")
-    {
-        const QStringList parts = u.path().split('/', Qt::SkipEmptyParts);
-        if (parts.size() >= 5 && parts[2] == "blob")
-        {
-            const QString owner = parts[0];
-            const QString repo  = parts[1];
-            const QString branch = parts[3];
-            QString rest = parts.mid(4).join('/');
-            return QString("https://raw.githubusercontent.com/%1/%2/%3/%4")
-                .arg(owner, repo, branch, rest);
-        }
-    }
-    return url;
-}
-
-/************************************************************
- * @brief Read file lines, strip blanks and comments.
- ************************************************************/
-QStringList MatrixUtility::readTextFileLines(const QString &path)
-{
-    QStringList lines;
-    QFile f(path);
-    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        while (!f.atEnd())
-        {
-            QString line = QString::fromUtf8(f.readLine()).trimmed();
-            if (line.isEmpty()) continue;
-            if (line.startsWith('#')) continue;
-            lines << line;
-        }
-        f.close();
-    }
-    return lines;
-}
-
-/************************************************************
- * @brief Download text from local or remote URL.
- ************************************************************/
-bool MatrixUtility::downloadText(const QString &url, QByteArray &out)
-{
-    const QUrl u(url);
-    if (u.isLocalFile() || QFileInfo::exists(url))
-    {
-        QFile f(u.isLocalFile() ? u.toLocalFile() : url);
-        if (f.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            out = f.readAll();
-            f.close();
-            return true;
-        }
-        return false;
-    }
-
-    QNetworkAccessManager mgr;
-    QNetworkRequest req{ QUrl(url) };
-    QEventLoop loop;
-    QNetworkReply *reply = mgr.get(req);
-    QObject::connect(reply, &QNetworkReply::finished,
-                     &loop, &QEventLoop::quit);
-    loop.exec();
-    if (reply->error() == QNetworkReply::NoError)
-    {
-        out = reply->readAll();
-        reply->deleteLater();
-        return true;
-    }
-    reply->deleteLater();
-    return false;
-}
-
-/************************************************************
- * @brief Validate requirements quickly.
- ************************************************************/
-bool MatrixUtility::validateRequirements(const QStringList &lines)
-{
-    QStringList errors;
-    return validateRequirementsWithErrors(lines, errors);
-}
-
-/************************************************************
- * @brief Validate with detailed error reporting.
- ************************************************************/
-bool MatrixUtility::validateRequirementsWithErrors(
-    const QStringList &lines,
-    QStringList &errors)
-{
-    errors.clear();
-    if (lines.isEmpty())
-    {
-        errors << "Empty input: no lines to validate.";
-        return false;
-    }
-
-    static const QRegularExpression re(R"(^([A-Za-z0-9_.-]+)(\[[A-Za-z0-9_.\-,\s]+\])?\s*(?:([=><!~]{1,2})\s*([^\s#;]+))?(?:\s*;[^#]+)?$)");
-
-    bool anyMeaningful = false;
-    for (int i = 0; i < lines.size(); ++i)
-    {
-        const QString raw = lines.at(i);
-        const QString trimmed = raw.trimmed();
-        if (trimmed.isEmpty() || trimmed.startsWith('#')) continue;
-        anyMeaningful = true;
-        if (!re.match(trimmed).hasMatch())
-        {
-            errors << QString("Line %1 failed: \"%2\"")
-            .arg(i + 1).arg(raw);
-        }
-    }
-    if (!anyMeaningful)
-    {
-        errors << "No meaningful requirement lines found.";
-        return false;
-    }
-    return errors.isEmpty();
-}
-
-/************** End of MatrixUtility.cpp *************************/
-
-#-------------------------------------------------------------------------------
-# File: src/MatrixUtility.h
-#-------------------------------------------------------------------------------
-/****************************************************************
- * @file MatrixUtility.h
- * @brief Utility functions for PipMatrixResolverQt.
- *
- * @author Jeffrey
- * @version 0.4
- * @date    2025-11-01
- * @section License Unlicensed, MIT, or any.
- * @section DESCRIPTION
- * Provides helpers for reading requirements files, writing them
- * into models, validating entries, ensuring view scrollability,
- * and downloading text resources.
- ***************************************************************/
-
-#pragma once
-
-#include <QString>
-#include <QStringList>
-#include <QByteArray>
-
-class QStandardItemModel;
-class QTableView;
-
-namespace MatrixUtility
-{
-/************************************************************
-     * @brief Return logs directory, create if missing.
-     ************************************************************/
-QString logsDir();
-
-/************************************************************
-     * @brief Return history directory, create if missing.
-     ************************************************************/
-QString historyDir();
-
-/************************************************************
-     * @brief Normalize GitHub blob URLs to raw URLs.
-     ************************************************************/
-QString normalizeRawUrl(const QString &url);
-
-/************************************************************
-     * @brief Read file lines, strip blanks and comments.
-     ************************************************************/
-QStringList readTextFileLines(const QString &path);
-
-/************************************************************
-     * @brief Ensure scrollbars and column sizing for a view.
-     ************************************************************/
-void ensureViewScrollable(QTableView *view);
-
-/************************************************************
-     * @brief Download text from local or remote URL.
-     ************************************************************/
-bool downloadText(const QString &url, QByteArray &out);
-
-/************************************************************
-     * @brief Validate requirements quickly.
-     ************************************************************/
-bool validateRequirements(const QStringList &lines);
-
-/************************************************************
-     * @brief Validate with detailed error reporting.
-     ************************************************************/
-bool validateRequirementsWithErrors(const QStringList &lines,
-                                    QStringList &errors);
-}
-
-/************** End of MatrixUtility.h **************************/
 
 #-------------------------------------------------------------------------------
 # File: src/PipToolsRunner.cpp
@@ -2624,43 +2940,49 @@ signals:
 
 int main(int argc, char *argv[])
 {
-        QApplication theApplication(argc, argv);
+    // Set app version before MainWindow is constructed
+    MainWindow::appVersion = "0.1.3"; // or any version you wan
 
-        // Register compiled resources
-        Q_INIT_RESOURCE(PipMatrixResolverQt);
+    QCoreApplication::setOrganizationName(MainWindow::kOrganizationName);
+    QCoreApplication::setApplicationName(MainWindow::kApplicationName);
 
-        // Enable icons in menus globally
-        theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
+    QApplication theApplication(argc, argv);
 
-        // Set application icon
-        QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
+    // Register compiled resources
+    Q_INIT_RESOURCE(PipMatrixResolverQt);
 
-        // Diagnostics
-        qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
+    // Enable icons in menus globally
+    theApplication.setAttribute(Qt::AA_DontShowIconsInMenus, false);
 
-        // Translation loading
-        const QString languageCode = QLocale::system().name().split('_').first();
-        auto loadTranslator = [&](const QString &baseName) -> bool
+    // Set application icon
+    QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
+
+    // Diagnostics
+    qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
+
+    // Translation loading
+    const QString languageCode = QLocale::system().name().split('_').first();
+    auto loadTranslator = [&](const QString &baseName) -> bool
+    {
+        QTranslator *tr = new QTranslator(&theApplication);
+        const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
+        if (tr->load(qmFile))
         {
-            QTranslator *tr = new QTranslator(&theApplication);
-            const QString qmFile = QString(":/translations/%1_%2.qm").arg(baseName, languageCode);
-            if (tr->load(qmFile))
-            {
-                theApplication.installTranslator(tr);
-                qDebug() << "Loaded translation:" << qmFile;
-                return true;
-            }
-            delete tr;
-            return false;
-        };
+            theApplication.installTranslator(tr);
+            qDebug() << "Loaded translation:" << qmFile;
+            return true;
+        }
+        delete tr;
+        return false;
+    };
 
-        loadTranslator("PipMatrixResolverQt");
-        loadTranslator("MatrixUtility");
-        loadTranslator("MatrixHistory");
+    loadTranslator("PipMatrixResolverQt");
+    loadTranslator("MatrixUtility");
+    loadTranslator("MatrixHistory");
 
-        MainWindow w;
-        w.show();
-        return theApplication.exec();
+    MainWindow w;
+    w.show();
+    return theApplication.exec();
 }
 
 #-------------------------------------------------------------------------------
@@ -2773,7 +3095,7 @@ TEST(ResolverEngineTest, BasicSanity)
 # Directory Structure
 #-------------------------------------------------------------------------------
 ├── .qtcreator
-│   ├── qtc-cmake-presets-IbUJIMne
+│   ├── qtc-cmake-presets-uEazGGiR
 │   └── CMakeLists.txt.user
 ├── icons
 │   ├── app.svg
@@ -2794,17 +3116,14 @@ TEST(ResolverEngineTest, BasicSanity)
 │   ├── MainWindow.cpp
 │   ├── MainWindow.h
 │   ├── MainWindow.ui
-│   ├── MatrixHistory.cpp
-│   ├── MatrixHistory.h
-│   ├── MatrixUtility.cpp
-│   ├── MatrixUtility.h
 │   ├── PipToolsRunner.cpp
 │   ├── PipToolsRunner.h
 │   ├── ResolverEngine.cpp
 │   ├── ResolverEngine.h
 │   ├── VenvManager.cpp
 │   ├── VenvManager.h
-│   └── main.cpp
+│   ├── main.cpp
+│   └── venv_manager.py
 ├── tests
 │   ├── gtest_resolver.cpp
 │   ├── qt_test_main.cpp
@@ -2827,7 +3146,6 @@ TEST(ResolverEngineTest, BasicSanity)
 │   └── PipMatrixResolverQt_es.ts
 ├── .gitignore
 ├── CMakeLists.txt
-├── CMakeLists.txt.user
 ├── LICENSE
 ├── PipMatrixResolverQt.qrc
 ├── README.md

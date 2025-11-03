@@ -22,6 +22,11 @@
 #include <QEventLoop>
 #include <QUrl>
 #include <utility> // Add this to your includes for std::as_const
+#include <QSysInfo>
+#include <QProcess>
+#include <QPlainTextEdit>
+#include <QLineEdit>
+#include <QDir>
 
 /****************************************************************
  * @brief Globals for MainWindow.
@@ -84,6 +89,13 @@ MainWindow::MainWindow(QWidget *parent)
     webHistoryTable->setModel(webHistoryModel);
     progress = ui->progressBar;
 
+    gpuDetectedCheckBox = ui->gpuDetectedCheckBox;
+    useCpuCheckBox = ui->useCpuCheckBox;
+    cudaCheckBox = ui->cudaCheckBox;
+    osEdit = ui->osEdit;
+    osReleaseEdit = ui->osReleaseEdit;
+    osVersionEdit = ui->osVersionEdit;
+
     requirementsView->setModel(requirementsModel);
     requirementsView->setAlternatingRowColors(true);
     requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -129,6 +141,23 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::updateLocalHistoryButtons);
     connect(webHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &MainWindow::updateWebHistoryButtons);
+    connect(ui->actionCreateVenv, &QAction::triggered, this, &MainWindow::onCreateVenv);
+
+    // Terminal tab
+    connect(ui->runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
+    connect(ui->clearTerminalBtn, &QPushButton::clicked, this, &MainWindow::onClearTerminal);
+
+    // Package Manager tab
+    connect(ui->searchPackageBtn, &QPushButton::clicked, this, &MainWindow::onSearchPackage);
+    connect(ui->installPackageBtn, &QPushButton::clicked, this, &MainWindow::onInstallPackage);
+    connect(ui->uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
+
+    connect(ui->mainTabs, &QTabWidget::currentChanged, this, [this](int index){
+        if (ui->mainTabs->widget(index)->objectName() == "tabPackageManager") {
+            refreshInstalledPackages();
+        }
+    });
+    connect(ui->installedPackagesList, &QListWidget::doubleClicked, this, &MainWindow::onInstalledPackagesListDoubleClicked);
 
 /*
  * Auto connected
@@ -150,6 +179,10 @@ MainWindow::MainWindow(QWidget *parent)
     refreshRecentMenus();
     refreshHistoryTables();
     checkAndRestoreSettings();
+
+    detectSystem();         // Detect OS, release, version, GPU
+    restoreCpuCudaSettings(); // Restore CPU/Cuda settings from QSettings
+    setupVenvPaths();       // Set up venv_running and venv_testing paths
 }
 
 /****************************************************************
@@ -979,6 +1012,9 @@ void MainWindow::updateWebHistoryButtons()
     ui->webDownButton->setEnabled(canDown);
 }
 
+/****************************************************************
+ * @brief save Settings.
+ ***************************************************************/
 void MainWindow::saveSettings()
 {
     QSettings s(kOrganizationName, kApplicationName);
@@ -986,8 +1022,13 @@ void MainWindow::saveSettings()
     s.setValue("settings/pipVersion", ui->pipVersionEdit->text());
     s.setValue("settings/pipToolsVersion", ui->pipToolsVersionEdit->text());
     s.setValue("settings/maxItems", ui->spinMaxItems->value());
+    s.setValue("settings/useCpu", useCpuCheckBox->isChecked());
+    s.setValue("settings/cuda", cudaCheckBox->isChecked());
 }
 
+/****************************************************************
+ * @brief check And Restore Settings.
+ ***************************************************************/
 void MainWindow::checkAndRestoreSettings()
 {
     QSettings s(kOrganizationName, kApplicationName);
@@ -1028,5 +1069,388 @@ void MainWindow::checkAndRestoreSettings()
     }
     ui->spinMaxItems->setValue(maxItems);
 }
+
+/****************************************************************
+ * @brief Restores CPU and Cuda settings from QSettings to UI.
+ ***************************************************************/
+void MainWindow::restoreCpuCudaSettings()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+    ui->useCpuCheckBox->setChecked(s.value("settings/useCpu", false).toBool());
+    ui->cudaCheckBox->setChecked(s.value("settings/cuda", true).toBool());
+}
+
+/****************************************************************
+ * @brief Detect OS System.
+ ***************************************************************/
+void MainWindow::detectSystem()
+{
+    // GPU detection (simple: check for NVIDIA)
+    bool gpuDetected = false;
+    QString os, release, version;
+#if defined(Q_OS_WIN)
+    os = "Windows";
+    release = QSysInfo::productType();
+    version = QSysInfo::productVersion();
+#elif defined(Q_OS_MAC)
+    os = "Mac";
+    release = QSysInfo::productType();
+    version = QSysInfo::productVersion();
+#elif defined(Q_OS_LINUX)
+    os = "Linux";
+    QFile f("/etc/os-release");
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        while (!f.atEnd()) {
+            QString line = f.readLine();
+            if (line.startsWith("ID=")) release = line.mid(3).trimmed().replace("\"", "");
+            if (line.startsWith("VERSION_ID=")) version = line.mid(11).trimmed().replace("\"", "");
+        }
+    }
+#endif
+    osEdit->setText(os);
+    osReleaseEdit->setText(release);
+    osVersionEdit->setText(version);
+
+#if defined(Q_OS_WIN)
+    QProcess proc;
+    proc.start("wmic path win32_VideoController get name");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+#elif defined(Q_OS_LINUX)
+    QProcess proc;
+    proc.start("lspci");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+#elif defined(Q_OS_MAC)
+    QProcess proc;
+    proc.start("system_profiler SPDisplaysDataType");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+#endif
+    if (!gpuDetected)
+    {
+        gpuDetected = detectNvidiaGpu();
+        ui->gpuDetectedCheckBox->setChecked(gpuDetected);
+    }
+    // Save to QSettings
+    QSettings s(kOrganizationName, kApplicationName);
+    s.setValue("settings/os", os);
+    s.setValue("settings/osRelease", release);
+    s.setValue("settings/osVersion", version);
+    s.setValue("settings/gpuDetected", gpuDetected);
+    if (gpuDetected)
+    {
+        ui->statusbar->showMessage(tr("GPU Detected"));
+    }
+    else
+    {
+        ui->statusbar->showMessage(tr("GPU Not Detected"));
+    }
+}
+
+/****************************************************************
+ * @brief on Create Venv.
+ ***************************************************************/
+void MainWindow::onCreateVenv()
+{
+    // Check if python, pip, or pip-tools settings have changed
+    // If so, rebuild venv_running
+    // (You can compare current settings to those saved in QSettings)
+
+    // Call your bash script using QProcess
+    QProcess proc;
+    QString script = "/path/to/pip-matrix-common.sh";
+    QStringList args;
+    args << "--create-venv-running"; // You can define this flag in your script
+    proc.start(script, args);
+    proc.waitForFinished(-1);
+    QString output = proc.readAllStandardOutput();
+    QMessageBox::information(this, tr("Create venv_running"), output);
+}
+
+/****************************************************************
+ * @brief Sets up venv_running and venv_testing paths and saves to QSettings.
+ ***************************************************************/
+void MainWindow::setupVenvPaths()
+{
+    QSettings s(kOrganizationName, kApplicationName);
+    QString projectRoot = QDir::currentPath();
+    QString venvRunning = projectRoot + "/.venvs/venv_running";
+    QString venvTesting = projectRoot + "/.venvs/venv_testing";
+    s.setValue("venv/venv_running", venvRunning);
+    s.setValue("venv/venv_testing", venvTesting);
+}
+
+/****************************************************************
+ * @brief detect Gpu Via PowerShell.
+ ***************************************************************/
+bool MainWindow::detectGpuViaPowerShell()
+{
+    QProcess proc;
+    proc.start("powershell", QStringList() << "-Command" << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    // Debug: print output if needed
+    // QMessageBox::information(nullptr, "PowerShell GPU Output", output);
+    return output.contains("NVIDIA", Qt::CaseInsensitive);
+}
+
+/****************************************************************
+ * @brief detect Gpu Via DxDiag.
+ ***************************************************************/
+bool MainWindow::detectGpuViaDxDiag()
+{
+    QProcess proc;
+    proc.start("cmd", QStringList() << "/c" << "dxdiag /t dxdiag.txt");
+    proc.waitForFinished();
+    QFile file("dxdiag.txt");
+    bool found = false;
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString dxdiagOutput = file.readAll();
+        found = dxdiagOutput.contains("NVIDIA", Qt::CaseInsensitive);
+        file.remove(); // Clean up
+    }
+    // Debug: print output if needed
+    // QMessageBox::information(nullptr, "dxdiag GPU Output", dxdiagOutput);
+    return found;
+}
+
+/****************************************************************
+ * @brief detect Gpu Via Nvidia Smi.
+ ***************************************************************/
+bool MainWindow::detectGpuViaNvidiaSmi()
+{
+    QProcess proc;
+    proc.start("nvidia-smi");
+    proc.waitForFinished();
+    QString output = proc.readAllStandardOutput();
+    // Debug: print output if needed
+    // QMessageBox::information(nullptr, "nvidia-smi Output", output);
+    return output.contains("NVIDIA", Qt::CaseInsensitive);
+}
+
+/****************************************************************
+ * @brief detect Nvidia Gpu.
+ ***************************************************************/
+bool MainWindow::detectNvidiaGpu()
+{
+    // Primary test: PowerShell WMI
+    if (detectGpuViaPowerShell()) return true;
+    // Fallback 1: dxdiag
+    if (detectGpuViaDxDiag()) return true;
+    // Fallback 2: nvidia-smi
+    if (detectGpuViaNvidiaSmi()) return true;
+    // Not detected
+    return false;
+}
+
+/****************************************************************
+ * @brief on Run Command.
+ ***************************************************************/
+void MainWindow::onRunCommand()
+{
+    QString command = ui->commandInput->text().trimmed();
+    if (command.isEmpty()) {
+        ui->terminalOutput->appendPlainText("No command entered.");
+        return;
+    }
+
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+
+    QStringList args;
+    bool usedVenv = false;
+
+    if (command.startsWith("pip ")) {
+        args << "-m" << "pip";
+        args << command.mid(4).split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else if (command.startsWith("pip-compile")) {
+        args << "-m" << "piptools" << "compile";
+        QString rest = command.mid(QString("pip-compile").length()).trimmed();
+        if (!rest.isEmpty()) args << rest.split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else if (command.startsWith("pip-sync")) {
+        args << "-m" << "piptools" << "sync";
+        QString rest = command.mid(QString("pip-sync").length()).trimmed();
+        if (!rest.isEmpty()) args << rest.split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else if (command.startsWith("python ")) {
+        args = command.mid(7).split(' ');
+        process.start(venvPython, args);
+        usedVenv = true;
+    } else {
+#if defined(Q_OS_WIN)
+        process.start("cmd.exe", QStringList() << "/C" << command);
+#else
+        process.start("bash", QStringList() << "-c" << command);
+#endif
+    }
+
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+
+    if (usedVenv)
+        ui->terminalOutput->appendPlainText("[venv] " + command);
+
+    if (!output.isEmpty())
+        ui->terminalOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->terminalOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief on Clear Terminal.
+ ***************************************************************/
+void MainWindow::onClearTerminal()
+{
+    ui->terminalOutput->clear();
+}
+
+/****************************************************************
+ * @brief on Search Package.
+ ***************************************************************/
+void MainWindow::onSearchPackage()
+{
+    QString pkg = ui->packageNameInput->text().trimmed();
+    if (pkg.isEmpty()) {
+        ui->packageOutput->appendPlainText("Enter a package name to search.");
+        return;
+    }
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "search", pkg};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+    if (!output.isEmpty())
+        ui->packageOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->packageOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief on Install Package.
+ ***************************************************************/
+void MainWindow::onInstallPackage()
+{
+    QString pkg = ui->packageNameInput->text().trimmed();
+    if (pkg.isEmpty()) {
+        ui->packageOutput->appendPlainText("Enter a package name to install.");
+        return;
+    }
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "install", pkg};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+    if (!output.isEmpty())
+        ui->packageOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->packageOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief on Uninstall Package.
+ ***************************************************************/
+void MainWindow::onUninstallPackage()
+{
+    QString pkg = ui->packageNameInput->text().trimmed();
+    if (pkg.isEmpty()) {
+        ui->packageOutput->appendPlainText("Enter a package name to uninstall.");
+        return;
+    }
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "uninstall", "-y", pkg};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+    if (!output.isEmpty())
+        ui->packageOutput->appendPlainText(output);
+    if (!error.isEmpty())
+        ui->packageOutput->appendPlainText("[ERROR] " + error);
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::refreshInstalledPackages()
+{
+    ui->installedPackagesList->clear();
+    QProcess process;
+    QString venvPython;
+#if defined(Q_OS_WIN)
+    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
+#else
+    venvPython = QDir::current().filePath("venv_running/bin/python");
+#endif
+    QStringList args = {"-m", "pip", "list", "--format=freeze"};
+    process.start(venvPython, args);
+    process.waitForFinished();
+    QString output = process.readAllStandardOutput();
+    QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        ui->installedPackagesList->addItem(lines.at(i));
+    }
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
+{
+    QString pkg = ui->installedPackagesList->item(index.row())->text().split('=')[0];
+    ui->packageNameInput->setText(pkg);
+    onUninstallPackage();
+}
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
+
+/****************************************************************
+ * @brief .
+ ***************************************************************/
 
 /************** End of MainWindow.cpp **************************/

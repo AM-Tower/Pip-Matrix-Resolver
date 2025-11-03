@@ -18,7 +18,7 @@
     <item>
      <widget class="QTabWidget" name="mainTabs">
       <property name="currentIndex">
-       <number>1</number>
+       <number>3</number>
       </property>
       <widget class="QWidget" name="tabMain">
        <attribute name="title">
@@ -59,11 +59,41 @@
         </item>
         <item>
          <layout class="QHBoxLayout" name="localHistoryButtonBar">
-          <item><widget class="QPushButton" name="localAddButton"><property name="text"><string>Add</string></property></widget></item>
-          <item><widget class="QPushButton" name="localEditButton"><property name="text"><string>Edit</string></property></widget></item>
-          <item><widget class="QPushButton" name="localDeleteButton"><property name="text"><string>Delete</string></property></widget></item>
-          <item><widget class="QPushButton" name="localUpButton"><property name="text"><string>Up</string></property></widget></item>
-          <item><widget class="QPushButton" name="localDownButton"><property name="text"><string>Down</string></property></widget></item>
+          <item>
+           <widget class="QPushButton" name="localAddButton">
+            <property name="text">
+             <string>Add</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localEditButton">
+            <property name="text">
+             <string>Edit</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localDeleteButton">
+            <property name="text">
+             <string>Delete</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localUpButton">
+            <property name="text">
+             <string>Up</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="localDownButton">
+            <property name="text">
+             <string>Down</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
         <item>
@@ -71,12 +101,114 @@
         </item>
         <item>
          <layout class="QHBoxLayout" name="webHistoryButtonBar">
-          <item><widget class="QPushButton" name="webAddButton"><property name="text"><string>Add</string></property></widget></item>
-          <item><widget class="QPushButton" name="webEditButton"><property name="text"><string>Edit</string></property></widget></item>
-          <item><widget class="QPushButton" name="webDeleteButton"><property name="text"><string>Delete</string></property></widget></item>
-          <item><widget class="QPushButton" name="webUpButton"><property name="text"><string>Up</string></property></widget></item>
-          <item><widget class="QPushButton" name="webDownButton"><property name="text"><string>Down</string></property></widget></item>
+          <item>
+           <widget class="QPushButton" name="webAddButton">
+            <property name="text">
+             <string>Add</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webEditButton">
+            <property name="text">
+             <string>Edit</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webDeleteButton">
+            <property name="text">
+             <string>Delete</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webUpButton">
+            <property name="text">
+             <string>Up</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="webDownButton">
+            <property name="text">
+             <string>Down</string>
+            </property>
+           </widget>
+          </item>
          </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabTerminal">
+       <attribute name="title">
+        <string>Terminal</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_terminal">
+        <item>
+         <widget class="QPlainTextEdit" name="terminalOutput"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_terminal">
+          <item>
+           <widget class="QLineEdit" name="commandInput"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="runCommandBtn">
+            <property name="text">
+             <string>Run Command</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="clearTerminalBtn">
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabPackageManager">
+       <attribute name="title">
+        <string>Package Manager</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="verticalLayout_packageManager">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_packageManager">
+          <item>
+           <widget class="QLineEdit" name="packageNameInput"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="searchPackageBtn">
+            <property name="text">
+             <string>Search</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="installPackageBtn">
+            <property name="text">
+             <string>Install</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="uninstallPackageBtn">
+            <property name="text">
+             <string>Uninstall</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QListWidget" name="installedPackagesList"/>
+        </item>
+        <item>
+         <widget class="QPlainTextEdit" name="packageOutput"/>
         </item>
        </layout>
       </widget>
@@ -125,18 +257,114 @@
            </widget>
           </item>
           <item row="3" column="1">
-           <widget class="QSpinBox" name="spinMaxItems">
-            <property name="toolTip">
-             <string>-1 = unlimited, 0 not allowed, ≥1 valid</string>
+           <layout class="QHBoxLayout" name="spinMaxItemsLayout">
+            <item>
+             <widget class="QSpinBox" name="spinMaxItems">
+              <property name="toolTip">
+               <string>-1 = unlimited, 0 not allowed, ≥1 valid</string>
+              </property>
+              <property name="minimum">
+               <number>-1</number>
+              </property>
+              <property name="maximum">
+               <number>2147483647</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="spinMaxItemsSpacer">
+              <property name="orientation">
+               <enum>Qt::Orientation::Horizontal</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Policy::Expanding</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="labelGpuDetected">
+            <property name="text">
+             <string>GPU Detected:</string>
             </property>
-            <property name="minimum">
-             <number>-1</number>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QCheckBox" name="gpuDetectedCheckBox">
+            <property name="enabled">
+             <bool>false</bool>
             </property>
-            <property name="maximum">
-             <number>2147483647</number>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="labelUseCpu">
+            <property name="text">
+             <string>Use CPU:</string>
             </property>
-            <property name="value">
-             <number>10</number>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QCheckBox" name="useCpuCheckBox"/>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="labelCuda">
+            <property name="text">
+             <string>Cuda:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QCheckBox" name="cudaCheckBox"/>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="labelOs">
+            <property name="text">
+             <string>OS:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QLineEdit" name="osEdit">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="labelOsRelease">
+            <property name="text">
+             <string>Release:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QLineEdit" name="osReleaseEdit">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="0">
+           <widget class="QLabel" name="labelOsVersion">
+            <property name="text">
+             <string>Version:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="9" column="1">
+           <widget class="QLineEdit" name="osVersionEdit">
+            <property name="readOnly">
+             <bool>true</bool>
             </property>
            </widget>
           </item>

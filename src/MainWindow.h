@@ -95,6 +95,20 @@ private slots:
 
     void updateLocalHistoryButtons();
     void updateWebHistoryButtons();
+    // Slot for menu action
+    void onCreateVenv();
+
+    void onRunCommand();
+    void onClearTerminal();
+
+    // Package Manager tab
+    void onSearchPackage();
+    void onInstallPackage();
+    void onUninstallPackage();
+
+    void refreshInstalledPackages();
+    void onInstalledPackagesListDoubleClicked(const QModelIndex &index);
+
 
 private:
     void loadRequirementsFromFile(const QString &path);
@@ -112,10 +126,19 @@ private:
     ***************************************************************/
     void checkAndRestoreSettings();
 
+    bool detectGpuViaPowerShell();
+    bool detectNvidiaGpu();
+    bool detectGpuViaNvidiaSmi();
+    bool detectGpuViaDxDiag();
     /****************************************************************
     * @brief Saves all settings from the Settings tab to QSettings.
     ***************************************************************/
     void saveSettings();
+    // Startup/system functions
+    void detectSystem();
+    void restoreCpuCudaSettings();
+    void setupVenvPaths();
+
     // Utility functions moved from MatrixUtility
     QStringList readTextFileLines(const QString &path);
     bool validateRequirementsWithErrors(const QStringList &lines, QStringList &errors);
@@ -139,6 +162,18 @@ private:
     QProgressBar *progress;
     QMenu *recentLocalMenu;
     QMenu *recentWebMenu;
+
+    // Settings tab widgets
+    QCheckBox *gpuDetectedCheckBox;
+    QCheckBox *useCpuCheckBox;
+    QCheckBox *cudaCheckBox;
+    QLineEdit *osEdit;
+    QLineEdit *osReleaseEdit;
+    QLineEdit *osVersionEdit;
+
+    // Venv paths
+    QString venvRunningPath;
+    QString venvTestingPath;
 
     // Settings
     int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
