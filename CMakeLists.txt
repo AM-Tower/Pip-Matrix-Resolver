@@ -23,8 +23,10 @@ qt_add_executable(PipMatrixResolverQt
     src/main.cpp
     src/MainWindow.cpp src/MainWindow.h
     src/CommandsTab.cpp src/CommandsTab.h
+    src/TerminalEngine.cpp src/TerminalEngine.h
     ${APP_RESOURCES}
     ${QM_FILES}
+    src/TerminalEngine.h src/TerminalEngine.cpp
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
@@ -71,7 +73,7 @@ elseif(APPLE)
         )
     endif()
 elseif(UNIX)
-    message(STATUS "✅ Linux build — Qt runtime deployment handled by system packages.")
+    message(STATUS "✅ Linux build – Qt runtime deployment handled by system packages.")
 endif()
 
 # Packaging with CPack (Qt Installer, NSIS, DEB/RPM)

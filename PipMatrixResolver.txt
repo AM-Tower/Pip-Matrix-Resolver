@@ -1,6 +1,6 @@
 #===============================================================================
 # Project: PipMatrixResolver
-# Generated on: 2025-11-03 20:08:23
+# Generated on: 2025-11-04 11:20:26
 # OS: WSL on Ubuntu: 24.04
 # This file is used to show full source code, cmake, read me, and file locates.
 #================================C
@@ -31,7 +31,7 @@ qt_add_resources(APP_RESOURCES PipMatrixResolverQt.qrc)
 # Executable
 qt_add_executable(PipMatrixResolverQt
     src/main.cpp
-    src/MainWindow.cpp src/MainWindow.h src/MainWindow.ui
+    src/MainWindow.cpp src/MainWindow.h
     src/CommandsTab.cpp src/CommandsTab.h
     ${APP_RESOURCES}
     ${QM_FILES}
@@ -144,16 +144,65 @@ include(CPack)
 #-------------------------------------------------------------------------------
 # File: README.md
 #-------------------------------------------------------------------------------
-# PipMatrixResolverQt
+# Pip-Matrix-Resolver
+This is a Qt C++ GUI,
+that allows you to open requirements.txt
+and create a working Python environment terminal.
+* It has tabs to show the function it provides.
+* It has a Python Terminal to run commands and applications.
+* You can create batch files to process Python calls.
+
+A cross-platform Qt C++ GUI for resolving Python requirements.txt matrixes/matrices
+to build a Python environment to run Python applications.
+and managing virtual environments, 
+for running batch commands.
+
+## Use-Case
+The best use case for this application,
+is when you find it hard to install the Python application.
+You get stuck in Dependency Hell.
+Every computer OS, release, and verion, can have a different environment.
+This application will read a requirements.txt locally, 
+or over the web, normally from a GitHub repository.
+I assignes a matrix for all packages and their versions.
+You can adjust from the base, how much range you want to give it.
+By default it has 3 versions, but you can change the levels.
+
+The matrix will read the file requirements.sh, 
+and will update the matrix resolver values that resolve. 
+It will use the operator == to pin exact version.
+
+
+The time to run the test will vary, but here is the math.
+If you have 18 packages, each with 3 possible versions, 
+that gives you 18 independent variables with 3 options each. 
+The total number of possible combinations is 
+318=387,420,4893^18 = 387,420,489. 
+If each test takes 5 seconds, 
+running all combinations would require about 1.9 billion seconds, 
+or roughly 61.4 years of nonstop testing—assuming no parallelism, 
+no caching, and no skipped failures. 
+Clearly, exhaustive testing is impractical. 
+To optimize, we can use tools like pip‑tools to resolve dependencies up front, 
+prune invalid combinations, and lock down a consistent set of requirements, 
+dramatically reducing the number of cases we actually need to test.
+
+The reason I wrote this application:
+
+I wrote this to use SadTalker and MuseTalk.
+The are Pyton applications that take an image and wav file as arguments.
+I will animate the face in the image, to lip sync the wav file.
+This is called a talking heads video.
+It will allow me to install it and keep it updated on GitHub.
+I can create a batch file to process images and wav files into videos.
 
 ## Status:
 * Not working.
+* Open requirements.txt in Local and Web modes works.
+* Terminal is in work.
 * Just starting this project, and it will take time to get to a working version.
 
-### A cross platform Qt 6.10 C++ GUI for resolving Python requirements.txt matrices, managing virtual environments, and running batch multimedia conversions.
-
-Features
-
+#### Features
 * Resolve Python dependency matrices with pip-tools
 * Manage virtual environments (create, upgrade pip and pip-tools)
 * Batch convert audio + image to MP4 with ffmpeg
@@ -161,135 +210,89 @@ Features
 * Translation support (English and Spanish)
 
 ## Build Instructions
+Use Qt build or:
 ```
-mkdir build
- cd build
- cmake ..
- cmake --build .
- # cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
+cmake -S . -B build
+cmake --build build
 ```
-
 ### Create the installer/package:
+* cpack
 
+On Windows, windeployqt is run automatically after build.
+
+## Qt Project Structure
 ```
-cpack
+/
+├── 📂 build
+├── 📂 icons
+│   ├── 📄 app.svg
+│   ├── 📄 batch.svg
+│   ├── 📄 cancel.svg
+│   ├── 📄 info.svg
+│   ├── 📄 open.svg
+│   ├── 📄 pause.svg
+│   ├── 📄 readme.svg
+│   ├── 📄 resolve.svg
+│   ├── 📄 resume.svg
+│   ├── 📄 stop.svg
+│   ├── 📄 url.svg
+│   └── 📄 venv.svg
+├── 📂 src
+│   ├── 📄 MainWindow.cpp
+│   ├── 📄 MainWindow.h
+│   ├── 📄 CommandsTab.cpp
+│   ├── 📄 CommandsTab.h
+│   └── 📄 main.cpp
+├── 📂 tests
+│   ├── 📄 gtest_resolver.cpp
+│   ├── 📄 qt_test_main.cpp
+│   ├── 📄 qtest_mainwindow.cpp
+│   ├── 📄 test_main.cpp
+│   ├── 📄 test_mainwindow.cpp
+│   └── 📄 test_resolver.cpp
+├── 📂 translations
+│   ├── 📄 PipMatrixResolverQt_en.qm
+│   ├── 📄 PipMatrixResolverQt_en.ts
+│   ├── 📄 PipMatrixResolverQt_es.qm
+│   └── 📄 PipMatrixResolverQt_es.ts
+├── 📄 .gitignore
+├── 📄 CMakeLists.txt
+├── 📄 LICENSE
+├── 📄 PipMatrixResolverQt.qrc
+├── 📄 README.md
+├── 📄 cleanbash.sh
+├── 📄 requirements.txt
+├── 📄 src2txt.bat
+└── 📄 src2txt.sh
 ```
-
-## On Windows, windeployqt is run automatically after build.
-
-Project Tree
-
-```
-Qt/
-├── build
-├── icons
-│   ├── app.svg
-│   ├── batch.svg
-│   ├── cancel.svg
-│   ├── info.svg
-│   ├── open.svg
-│   ├── pause.svg
-│   ├── readme.svg
-│   ├── resolve.svg
-│   ├── resume.svg
-│   ├── stop.svg
-│   ├── url.svg
-│   └── venv.svg
-├── src
-│   ├── BatchRunner.cpp
-│   ├── BatchRunner.h
-│   ├── MainWindow.cpp
-│   ├── MainWindow.h
-│   ├── MainWindow.ui
-│   ├── PipToolsRunner.cpp
-│   ├── PipToolsRunner.h
-│   ├── ResolverEngine.cpp
-│   ├── ResolverEngine.h
-│   ├── VenvManager.cpp
-│   ├── VenvManager.h
-│   └── main.cpp
-├── src_text
-│   ├── BatchRunner.cpp.txt
-│   ├── BatchRunner.h.txt
-│   ├── MainWindow.cpp.txt
-│   ├── MainWindow.h.txt
-│   ├── MainWindow.ui.autosave.txt
-│   ├── MainWindow.ui.txt
-│   ├── PipMatrixResolverQt.qrc.txt
-│   ├── PipToolsRunner.cpp.txt
-│   ├── PipToolsRunner.h.txt
-│   ├── ResolverEngine.cpp.txt
-│   ├── ResolverEngine.h.txt
-│   ├── VenvManager.cpp.txt
-│   ├── VenvManager.h.txt
-│   └── main.cpp.txt
-├── tests
-│   ├── gtest_resolver.cpp
-│   ├── qt_test_main.cpp
-│   ├── qtest_mainwindow.cpp
-│   ├── test_main.cpp
-│   ├── test_mainwindow.cpp
-│   └── test_resolver.cpp
-├── translations
-│   ├── PipMatrixResolverQt_en.qm
-│   ├── PipMatrixResolverQt_en.ts
-│   ├── PipMatrixResolverQt_es.qm
-│   └── PipMatrixResolverQt_es.ts
-├── .gitignore
-├── CMakeLists.txt
-├── LICENSE
-├── PipMatrixResolverQt.qrc
-├── README.md
-├── cleanbash.sh
-├── requirements.txt
-├── src2txt.bat
-└── src2txt.sh
-```
-
 ## File Descriptions
 
-Root
-```
-CMakeLists.txt – Build script: compiles sources, generates qm from ts, bundles resources
-PipMatrixResolverQt.qrc – Qt resource file embedding icons and compiled translations
-```
+#### Root
+* CMakeLists.txt – Build script: compiles sources, generates qm from ts, bundles resources
+* PipMatrixResolverQt.qrc – Qt resource file embedding icons and compiled translations
 
-resources/icons
-```
-SVG icons used in menus and toolbars
-```
 
-src
-```
-main.cpp – Application entry point. Sets up QApplication, loads translations, shows MainWindow
-MainWindow.h/.cpp/.ui – Main GUI window. Defines menus, log view, progress bar, and user actions
-ResolverEngine.h/.cpp – Core engine for iterating over package version combinations. Emits logs, progress, and success signals
-PipToolsRunner.h/.cpp – Wrapper around pip-compile. Runs with retries, logs output, analyzes errors
-VenvManager.h/.cpp – Creates and manages Python virtual environments. Upgrades pip and pip-tools
-BatchRunner.h/.cpp – Automates ffmpeg jobs. Enqueues tasks, parses progress, emits job completion signals
-```
+#### resources/icons
+* SVG icons used in menus and toolbars
 
-translations
-```
-PipMatrixResolverQt\_en.ts – English translation source
-PipMatrixResolverQt\_es.ts – Spanish translation source
-Both are compiled into qm at build time and embedded
-```
 
-build
-```
-Out of source build directory. Keeps generated files separate from source tree
-```
+#### src
+* main.cpp – Application entry point. Sets up QApplication, loads translations, shows MainWindow
+* MainWindow.h/.cpp – Main GUI window. Defines menus, log view, progress bar, and user actions.
+* CommandsTab.h/cpp -
 
-Usage
+#### translations
+* PipMatrixResolverQt_en.ts – English translation source
+* PipMatrixResolverQt_es.ts – Spanish translation source
+* Both are compiled into qm at build time and embedded
 
-```
-File → Open requirements file – Load a local requirements.txt
-Tools → Create/Update venv – Create or update a Python virtual environment
-Tools → Resolve matrix – Start iterative resolution of package versions
-Batch → Run batch conversion to mp4 – Combine audio and image into MP4
-Help → About – Show app info
-```
+#### Usage
+
+* File → Open requirements file – Load a local requirements.txt
+* Tools → Create/Update venv – Create or update a Python virtual environment
+* Tools → Resolve matrix – Start iterative resolution of package versions
+* Batch → Run batch conversion to mp4 – Combine audio and image into MP4
+* Help → About – Show app info
 
 ## Terminal Tab — What You Can Do
 * Run Python scripts:
@@ -339,8 +342,10 @@ Help → About – Show app info
 * Deactivate the virtual environment (if you started a shell session manually):
     * deactivate
 
-## License: 
-    Unlicensed, MIT or your chosen license
+## License:
+* Unlicensed, MIT or your chosen license
+
+## End of Readme
 
 #-------------------------------------------------------------------------------
 # File: src/CommandsTab.cpp
@@ -1022,16 +1027,16 @@ private:
  * @brief Implements the main application window.
  *
  * @author Jeffrey Scott Flesher with Copilot
- * @version 0.6
- * @date    2025-11-01
+ * @version 0.7
+ * @date    2025-11-03
  * @section License Unlicensed, MIT, or any.
  * @section DESCRIPTION
  * Implements the main window logic: settings, history, menus,
  * file and URL loaders, logging, and UI dialog wiring.
+ * Now with dynamic UI setup instead of .ui file.
  ***************************************************************/
 
 #include "MainWindow.h"
-#include "ui_MainWindow.h"
 #include <QApplication>
 #include <QFileDialog>
 #include <QHeaderView>
@@ -1040,14 +1045,10 @@ private:
 #include <QNetworkReply>
 #include <QEventLoop>
 #include <QUrl>
-#include <utility> // Add this to your includes for std::as_const
+#include <utility>
 #include <QSysInfo>
 #include <QProcess>
-#include <QPlainTextEdit>
-#include <QLineEdit>
-#include <QDir>
-#include <QString>
-#include <QDebug>
+#include <QLabel>
 
 /****************************************************************
  * @brief Globals for MainWindow.
@@ -1060,150 +1061,77 @@ const int DEFAULT_MAX_ITEMS = 10;
 const QString DEFAULT_APP_VERSION = "1.0";
 const QString MainWindow::kOrganizationName = "AM-Tower";
 const QString MainWindow::kApplicationName = "PipMatrixResolver";
+
 /****************************************************************
  * @brief Constructor for MainWindow.
  ***************************************************************/
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
-    ui(new Ui::MainWindow),
     requirementsModel(new QStandardItemModel(this)),
-    requirementsView(nullptr),
-    logView(nullptr),
-    progress(nullptr),
-    recentLocalMenu(nullptr),
-    recentWebMenu(nullptr),
+    localHistoryModel(new QStandardItemModel(this)),
+    webHistoryModel(new QStandardItemModel(this)),
     maxHistoryItems(10)
 {
-    ui->setupUi(this);
-
-    // Manually add Recent Local and Recent Web submenus after actionFetchRequirements
-    QList<QAction*> actions = ui->menuFile->actions();
-    int insertIndex = -1;
-    for (int i = 0; i < actions.size(); ++i)
-    {
-        if (actions[i] == ui->actionFetchRequirements)
-        {
-            insertIndex = i;
-            break;
-        }
-    }
-    recentLocalMenu = new QMenu(tr("Recent Local"), this);
-    recentWebMenu = new QMenu(tr("Recent Web"), this);
-    if (insertIndex != -1)
-    {
-        ui->menuFile->insertMenu(actions[insertIndex + 1], recentLocalMenu);
-        ui->menuFile->insertMenu(actions[insertIndex + 1], recentWebMenu);
-    }
-    else
-    {
-        ui->menuFile->addMenu(recentLocalMenu);
-        ui->menuFile->addMenu(recentWebMenu);
-    }
-
-    requirementsView = ui->requirementsView;
-    logView = ui->logView;
-    localHistoryTable = ui->localHistoryTable;
-    webHistoryTable = ui->webHistoryTable;
-    localHistoryModel = new QStandardItemModel(this);
-    webHistoryModel = new QStandardItemModel(this);
-    localHistoryTable->setModel(localHistoryModel);
-    webHistoryTable->setModel(webHistoryModel);
-    progress = ui->progressBar;
-
-    gpuDetectedCheckBox = ui->gpuDetectedCheckBox;
-    useCpuCheckBox = ui->useCpuCheckBox;
-    cudaCheckBox = ui->cudaCheckBox;
-    osEdit = ui->osEdit;
-    osReleaseEdit = ui->osReleaseEdit;
-    osVersionEdit = ui->osVersionEdit;
-
-    requirementsView->setModel(requirementsModel);
-    requirementsView->setAlternatingRowColors(true);
-    requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
-    requirementsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    requirementsView->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    requirementsView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    requirementsView->resizeColumnsToContents();
-    requirementsView->resizeRowsToContents();
-    requirementsView->setSizeAdjustPolicy(QAbstractScrollArea::AdjustToContents);
-    requirementsView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    requirementsView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setupUi();
 
     loadAppSettings();
     loadHistory();
 
-    connect(ui->actionOpenRequirements, &QAction::triggered, this, &MainWindow::openLocalRequirements);
-    connect(ui->actionFetchRequirements, &QAction::triggered, this, &MainWindow::fetchRequirementsFromUrl);
-    connect(ui->actionExit, &QAction::triggered, this, &MainWindow::exitApp);
+    // Connect actions
+    connect(actionOpenRequirements, &QAction::triggered, this, &MainWindow::openLocalRequirements);
+    connect(actionFetchRequirements, &QAction::triggered, this, &MainWindow::fetchRequirementsFromUrl);
+    connect(actionExit, &QAction::triggered, this, &MainWindow::exitApp);
+    connect(actionAbout, &QAction::triggered, this, &MainWindow::showAboutBox);
+    connect(actionViewReadme, &QAction::triggered, this, &MainWindow::showReadmeDialog);
+    connect(actionCreateVenv, &QAction::triggered, this, &MainWindow::onCreateVenv);
+    connect(actionResolveMatrix, &QAction::triggered, this, &MainWindow::startResolve);
+    connect(actionPause, &QAction::triggered, this, &MainWindow::pauseResolve);
+    connect(actionResume, &QAction::triggered, this, &MainWindow::resumeResolve);
+    connect(actionStop, &QAction::triggered, this, &MainWindow::stopResolve);
 
-    if (ui->buttonBoxPreferences)
+    // Connect settings buttons
+    if (buttonBoxPreferences)
     {
-        connect(ui->buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
-        QPushButton *applyBtn = ui->buttonBoxPreferences->button(QDialogButtonBox::Apply);
+        connect(buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
+        QPushButton *applyBtn = buttonBoxPreferences->button(QDialogButtonBox::Apply);
         if (applyBtn)
         {
             connect(applyBtn, &QPushButton::clicked, this, &MainWindow::saveAppSettings);
         }
     }
-    connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::showAboutBox);
-    connect(ui->actionViewReadme, &QAction::triggered, this, &MainWindow::showReadmeDialog);
-    ui->mainTabs->setCurrentIndex(0);
-    ui->mainTabs->setCurrentWidget(ui->tabMain);
 
-    // History tables and models
-    localHistoryTable = ui->localHistoryTable;
-    webHistoryTable = ui->webHistoryTable;
-    localHistoryModel = new QStandardItemModel(this);
-    webHistoryModel = new QStandardItemModel(this);
-    localHistoryTable->setModel(localHistoryModel);
-    webHistoryTable->setModel(webHistoryModel);
-
+    // Connect history table selection changes
     connect(localHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &MainWindow::updateLocalHistoryButtons);
     connect(webHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &MainWindow::updateWebHistoryButtons);
-    connect(ui->actionCreateVenv, &QAction::triggered, this, &MainWindow::onCreateVenv);
 
-    // Terminal tab
-    connect(ui->runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
-    connect(ui->clearTerminalBtn, &QPushButton::clicked, this, &MainWindow::onClearTerminal);
+    // Connect Terminal tab
+    connect(runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
+    connect(clearTerminalBtn, &QPushButton::clicked, this, &MainWindow::onClearTerminal);
 
-    // Package Manager tab
-    connect(ui->searchPackageBtn, &QPushButton::clicked, this, &MainWindow::onSearchPackage);
-    connect(ui->installPackageBtn, &QPushButton::clicked, this, &MainWindow::onInstallPackage);
-    connect(ui->uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
+    // Connect Package Manager tab
+    connect(searchPackageBtn, &QPushButton::clicked, this, &MainWindow::onSearchPackage);
+    connect(installPackageBtn, &QPushButton::clicked, this, &MainWindow::onInstallPackage);
+    connect(uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
 
-    connect(ui->mainTabs, &QTabWidget::currentChanged, this, [this](int index){
-        if (ui->mainTabs->widget(index)->objectName() == "tabPackageManager") {
-            refreshInstalledPackages();
-        }
-    });
-    connect(ui->installedPackagesList, &QListWidget::doubleClicked, this, &MainWindow::onInstalledPackagesListDoubleClicked);
+    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int index)
+            {
+                if (mainTabs->widget(index)->objectName() == "tabPackageManager")
+                {
+                    refreshInstalledPackages();
+                }
+            });
+    connect(installedPackagesList, &QListWidget::doubleClicked, this, &MainWindow::onInstalledPackagesListDoubleClicked);
 
-/*
- * Auto connected
-    // Connect local history buttons
-    connect(ui->localAddButton,    &QPushButton::clicked, this, &MainWindow::on_localAddButton_clicked);
-    connect(ui->localEditButton,   &QPushButton::clicked, this, &MainWindow::on_localEditButton_clicked);
-    connect(ui->localDeleteButton, &QPushButton::clicked, this, &MainWindow::on_localDeleteButton_clicked);
-    connect(ui->localUpButton,     &QPushButton::clicked, this, &MainWindow::on_localUpButton_clicked);
-    connect(ui->localDownButton,   &QPushButton::clicked, this, &MainWindow::on_localDownButton_clicked);
-
-    // Connect web history buttons
-    connect(ui->webAddButton,    &QPushButton::clicked, this, &MainWindow::on_webAddButton_clicked);
-    connect(ui->webEditButton,   &QPushButton::clicked, this, &MainWindow::on_webEditButton_clicked);
-    connect(ui->webDeleteButton, &QPushButton::clicked, this, &MainWindow::on_webDeleteButton_clicked);
-    connect(ui->webUpButton,     &QPushButton::clicked, this, &MainWindow::on_webUpButton_clicked);
-    connect(ui->webDownButton,   &QPushButton::clicked, this, &MainWindow::on_webDownButton_clicked);
-*/
     // Refresh tables on startup
     refreshRecentMenus();
     refreshHistoryTables();
     checkAndRestoreSettings();
 
-    detectSystem();         // Detect OS, release, version, GPU
-    restoreCpuCudaSettings(); // Restore CPU/Cuda settings from QSettings
-    setupVenvPaths();       // Set up venv_running and venv_testing paths
+    detectSystem();
+    restoreCpuCudaSettings();
+    setupVenvPaths();
 }
 
 /****************************************************************
@@ -1211,7 +1139,305 @@ MainWindow::MainWindow(QWidget *parent)
  ***************************************************************/
 MainWindow::~MainWindow()
 {
-    delete ui;
+}
+
+/****************************************************************
+ * @brief Sets up the entire UI dynamically.
+ ***************************************************************/
+void MainWindow::setupUi()
+{
+    // Main window setup
+    resize(900, 600);
+    setWindowTitle(tr("Pip Matrix Resolver"));
+
+    // Central widget
+    centralWidget = new QWidget(this);
+    setCentralWidget(centralWidget);
+
+    // Main layout
+    QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
+
+    // Tab widget
+    mainTabs = new QTabWidget(centralWidget);
+    mainTabs->setCurrentIndex(3);
+    mainLayout->addWidget(mainTabs);
+
+    // === TAB: MAIN ===
+    tabMain = new QWidget();
+    tabMain->setObjectName("tabMain");
+    QVBoxLayout *mainTabLayout = new QVBoxLayout(tabMain);
+
+    splitter = new QSplitter(Qt::Horizontal, tabMain);
+    requirementsView = new QTableView(splitter);
+    matrixView = new QTableView(splitter);
+    splitter->addWidget(requirementsView);
+    splitter->addWidget(matrixView);
+    mainTabLayout->addWidget(splitter);
+
+    bottomSplitter = new QSplitter(Qt::Horizontal, tabMain);
+    logView = new QPlainTextEdit(bottomSplitter);
+    logView->setReadOnly(true);
+    progress = new QProgressBar(bottomSplitter);
+    bottomSplitter->addWidget(logView);
+    bottomSplitter->addWidget(progress);
+    mainTabLayout->addWidget(bottomSplitter);
+
+    requirementsView->setModel(requirementsModel);
+    requirementsView->setAlternatingRowColors(true);
+    requirementsView->setSelectionBehavior(QAbstractItemView::SelectRows);
+    requirementsView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
+    mainTabs->addTab(tabMain, tr("Main"));
+
+    // === TAB: HISTORY ===
+    tabHistory = new QWidget();
+    tabHistory->setObjectName("tabHistory");
+    QVBoxLayout *historyLayout = new QVBoxLayout(tabHistory);
+
+    localHistoryTable = new QTableView(tabHistory);
+    localHistoryTable->setModel(localHistoryModel);
+    historyLayout->addWidget(localHistoryTable);
+
+    QHBoxLayout *localHistoryButtonBar = new QHBoxLayout();
+    localAddButton = new QPushButton(tr("Add"), tabHistory);
+    localEditButton = new QPushButton(tr("Edit"), tabHistory);
+    localDeleteButton = new QPushButton(tr("Delete"), tabHistory);
+    localUpButton = new QPushButton(tr("Up"), tabHistory);
+    localDownButton = new QPushButton(tr("Down"), tabHistory);
+    localHistoryButtonBar->addWidget(localAddButton);
+    localHistoryButtonBar->addWidget(localEditButton);
+    localHistoryButtonBar->addWidget(localDeleteButton);
+    localHistoryButtonBar->addWidget(localUpButton);
+    localHistoryButtonBar->addWidget(localDownButton);
+    historyLayout->addLayout(localHistoryButtonBar);
+
+    connect(localAddButton, &QPushButton::clicked, this, &MainWindow::on_localAddButton_clicked);
+    connect(localEditButton, &QPushButton::clicked, this, &MainWindow::on_localEditButton_clicked);
+    connect(localDeleteButton, &QPushButton::clicked, this, &MainWindow::on_localDeleteButton_clicked);
+    connect(localUpButton, &QPushButton::clicked, this, &MainWindow::on_localUpButton_clicked);
+    connect(localDownButton, &QPushButton::clicked, this, &MainWindow::on_localDownButton_clicked);
+
+    webHistoryTable = new QTableView(tabHistory);
+    webHistoryTable->setModel(webHistoryModel);
+    historyLayout->addWidget(webHistoryTable);
+
+    QHBoxLayout *webHistoryButtonBar = new QHBoxLayout();
+    webAddButton = new QPushButton(tr("Add"), tabHistory);
+    webEditButton = new QPushButton(tr("Edit"), tabHistory);
+    webDeleteButton = new QPushButton(tr("Delete"), tabHistory);
+    webUpButton = new QPushButton(tr("Up"), tabHistory);
+    webDownButton = new QPushButton(tr("Down"), tabHistory);
+    webHistoryButtonBar->addWidget(webAddButton);
+    webHistoryButtonBar->addWidget(webEditButton);
+    webHistoryButtonBar->addWidget(webDeleteButton);
+    webHistoryButtonBar->addWidget(webUpButton);
+    webHistoryButtonBar->addWidget(webDownButton);
+    historyLayout->addLayout(webHistoryButtonBar);
+
+    connect(webAddButton, &QPushButton::clicked, this, &MainWindow::on_webAddButton_clicked);
+    connect(webEditButton, &QPushButton::clicked, this, &MainWindow::on_webEditButton_clicked);
+    connect(webDeleteButton, &QPushButton::clicked, this, &MainWindow::on_webDeleteButton_clicked);
+    connect(webUpButton, &QPushButton::clicked, this, &MainWindow::on_webUpButton_clicked);
+    connect(webDownButton, &QPushButton::clicked, this, &MainWindow::on_webDownButton_clicked);
+
+    mainTabs->addTab(tabHistory, tr("History"));
+
+    // === TAB: TERMINAL ===
+    tabTerminal = new QWidget();
+    tabTerminal->setObjectName("tabTerminal");
+    QVBoxLayout *terminalLayout = new QVBoxLayout(tabTerminal);
+
+    terminalOutput = new QPlainTextEdit(tabTerminal);
+    terminalLayout->addWidget(terminalOutput);
+
+    QHBoxLayout *terminalCommandLayout = new QHBoxLayout();
+    commandInput = new QLineEdit(tabTerminal);
+    runCommandBtn = new QPushButton(tr("Run Command"), tabTerminal);
+    clearTerminalBtn = new QPushButton(tr("Clear"), tabTerminal);
+    terminalCommandLayout->addWidget(commandInput);
+    terminalCommandLayout->addWidget(runCommandBtn);
+    terminalCommandLayout->addWidget(clearTerminalBtn);
+    terminalLayout->addLayout(terminalCommandLayout);
+
+    mainTabs->addTab(tabTerminal, tr("Terminal"));
+
+    // === TAB: PACKAGE MANAGER ===
+    tabPackageManager = new QWidget();
+    tabPackageManager->setObjectName("tabPackageManager");
+    QVBoxLayout *packageManagerLayout = new QVBoxLayout(tabPackageManager);
+
+    QHBoxLayout *packageManagerCommandLayout = new QHBoxLayout();
+    packageNameInput = new QLineEdit(tabPackageManager);
+    searchPackageBtn = new QPushButton(tr("Search"), tabPackageManager);
+    installPackageBtn = new QPushButton(tr("Install"), tabPackageManager);
+    uninstallPackageBtn = new QPushButton(tr("Uninstall"), tabPackageManager);
+    packageManagerCommandLayout->addWidget(packageNameInput);
+    packageManagerCommandLayout->addWidget(searchPackageBtn);
+    packageManagerCommandLayout->addWidget(installPackageBtn);
+    packageManagerCommandLayout->addWidget(uninstallPackageBtn);
+    packageManagerLayout->addLayout(packageManagerCommandLayout);
+
+    installedPackagesList = new QListWidget(tabPackageManager);
+    packageManagerLayout->addWidget(installedPackagesList);
+
+    packageOutput = new QPlainTextEdit(tabPackageManager);
+    packageManagerLayout->addWidget(packageOutput);
+
+    mainTabs->addTab(tabPackageManager, tr("Package Manager"));
+
+    // === TAB: COMMANDS ===
+    tabCommands = new QWidget();
+    tabCommands->setObjectName("tabCommands");
+    QVBoxLayout *commandsLayout = new QVBoxLayout(tabCommands);
+
+    commandsTab = new CommandsTab(tabCommands);
+    commandsLayout->addWidget(commandsTab);
+
+    mainTabs->addTab(tabCommands, tr("Commands"));
+
+    // === TAB: SETTINGS ===
+    tabSettings = new QWidget();
+    tabSettings->setObjectName("tabSettings");
+    QVBoxLayout *settingsLayout = new QVBoxLayout(tabSettings);
+
+    QFormLayout *formLayout = new QFormLayout();
+
+    pythonVersionEdit = new QLineEdit(tabSettings);
+    formLayout->addRow(tr("Python version:"), pythonVersionEdit);
+
+    pipVersionEdit = new QLineEdit(tabSettings);
+    formLayout->addRow(tr("pip version:"), pipVersionEdit);
+
+    pipToolsVersionEdit = new QLineEdit(tabSettings);
+    formLayout->addRow(tr("pip-tools version:"), pipToolsVersionEdit);
+
+    spinMaxItems = new QSpinBox(tabSettings);
+    spinMaxItems->setMinimum(-1);
+    spinMaxItems->setMaximum(std::numeric_limits<int>::max());
+    spinMaxItems->setValue(10);
+    spinMaxItems->setToolTip(tr("-1 = unlimited, 0 not allowed, ≥1 valid"));
+    formLayout->addRow(tr("Maximum number of items:"), spinMaxItems);
+
+    gpuDetectedCheckBox = new QCheckBox(tabSettings);
+    gpuDetectedCheckBox->setEnabled(false);
+    formLayout->addRow(tr("GPU Detected:"), gpuDetectedCheckBox);
+
+    useCpuCheckBox = new QCheckBox(tabSettings);
+    formLayout->addRow(tr("Use CPU:"), useCpuCheckBox);
+
+    cudaCheckBox = new QCheckBox(tabSettings);
+    formLayout->addRow(tr("Cuda:"), cudaCheckBox);
+
+    osEdit = new QLineEdit(tabSettings);
+    osEdit->setReadOnly(true);
+    formLayout->addRow(tr("OS:"), osEdit);
+
+    osReleaseEdit = new QLineEdit(tabSettings);
+    osReleaseEdit->setReadOnly(true);
+    formLayout->addRow(tr("Release:"), osReleaseEdit);
+
+    osVersionEdit = new QLineEdit(tabSettings);
+    osVersionEdit->setReadOnly(true);
+    formLayout->addRow(tr("Version:"), osVersionEdit);
+
+    settingsLayout->addLayout(formLayout);
+
+    saveSettingsButton = new QPushButton(tr("Save Settings"), tabSettings);
+    settingsLayout->addWidget(saveSettingsButton);
+
+    restoreDefaultsButton = new QPushButton(tr("Restore Defaults"), tabSettings);
+    settingsLayout->addWidget(restoreDefaultsButton);
+
+    buttonBoxPreferences = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Apply | QDialogButtonBox::Cancel,
+        tabSettings
+        );
+    settingsLayout->addWidget(buttonBoxPreferences);
+
+    mainTabs->addTab(tabSettings, tr("Settings"));
+
+    // === MENU BAR ===
+    menuBar = new QMenuBar(this);
+    setMenuBar(menuBar);
+
+    // File menu
+    menuFile = new QMenu(tr("&File"), this);
+    menuBar->addMenu(menuFile);
+
+    actionOpenRequirements = new QAction(QIcon(":/icons/icons/open.svg"), tr("Open requirements file..."), this);
+    menuFile->addAction(actionOpenRequirements);
+
+    actionFetchRequirements = new QAction(QIcon(":/icons/icons/url.svg"), tr("Fetch requirements from URL..."), this);
+    menuFile->addAction(actionFetchRequirements);
+
+    menuFile->addSeparator();
+
+    // Recent Local and Recent Web submenus
+    recentLocalMenu = new QMenu(tr("Recent Local"), this);
+    menuFile->addMenu(recentLocalMenu);
+
+    recentWebMenu = new QMenu(tr("Recent Web"), this);
+    menuFile->addMenu(recentWebMenu);
+
+    menuFile->addSeparator();
+
+    actionExit = new QAction(tr("Exit"), this);
+    menuFile->addAction(actionExit);
+
+    // Tools menu
+    menuTools = new QMenu(tr("&Tools"), this);
+    menuBar->addMenu(menuTools);
+
+    actionCreateVenv = new QAction(QIcon(":/icons/icons/venv.svg"), tr("Create/Update venv"), this);
+    menuTools->addAction(actionCreateVenv);
+
+    actionResolveMatrix = new QAction(QIcon(":/icons/icons/resolve.svg"), tr("Resolve matrix"), this);
+    menuTools->addAction(actionResolveMatrix);
+
+    actionPause = new QAction(QIcon(":/icons/icons/pause.svg"), tr("Pause"), this);
+    menuTools->addAction(actionPause);
+
+    actionResume = new QAction(QIcon(":/icons/icons/resume.svg"), tr("Resume"), this);
+    menuTools->addAction(actionResume);
+
+    actionStop = new QAction(QIcon(":/icons/icons/stop.svg"), tr("Stop"), this);
+    menuTools->addAction(actionStop);
+
+    // Batch menu
+    menuBatch = new QMenu(tr("&Batch"), this);
+    menuBar->addMenu(menuBatch);
+
+    actionRunBatch = new QAction(QIcon(":/icons/icons/batch.svg"), tr("Run batch"), this);
+    menuBatch->addAction(actionRunBatch);
+
+    // Help menu
+    menuHelp = new QMenu(tr("&Help"), this);
+    menuBar->addMenu(menuHelp);
+
+    actionAbout = new QAction(QIcon(":/icons/icons/info.svg"), tr("About"), this);
+    menuHelp->addAction(actionAbout);
+
+    actionViewReadme = new QAction(QIcon(":/icons/icons/readme.svg"), tr("View README"), this);
+    menuHelp->addAction(actionViewReadme);
+
+    // === TOOLBAR ===
+    mainToolBar = new QToolBar(tr("Main Toolbar"), this);
+    addToolBar(Qt::TopToolBarArea, mainToolBar);
+
+    mainToolBar->addAction(actionOpenRequirements);
+    mainToolBar->addAction(actionFetchRequirements);
+    mainToolBar->addAction(actionCreateVenv);
+    mainToolBar->addAction(actionResolveMatrix);
+    mainToolBar->addAction(actionPause);
+    mainToolBar->addAction(actionResume);
+    mainToolBar->addAction(actionStop);
+    mainToolBar->addAction(actionRunBatch);
+    mainToolBar->addAction(actionAbout);
+    mainToolBar->addAction(actionViewReadme);
+
+    // === STATUS BAR ===
+    statusBar = new QStatusBar(this);
+    setStatusBar(statusBar);
 }
 
 /****************************************************************
@@ -1248,7 +1474,7 @@ void MainWindow::fetchRequirementsFromUrl()
         QLineEdit::Normal,
         "",
         &ok
-    );
+        );
     if (!ok || inputUrl.isEmpty())
     {
         return;
@@ -1282,7 +1508,7 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
             this,
             tr("Invalid requirements.txt"),
             tr("Validation failed:\n%1").arg(errors.join("\n"))
-        );
+            );
         return;
     }
     if (requirementsModel)
@@ -1348,8 +1574,8 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     refreshRecentMenus();
     saveHistory();
     appendLog(tr("Fetched %1 requirements from URL: %2")
-        .arg(requirementsModel->rowCount())
-        .arg(url));
+                  .arg(requirementsModel->rowCount())
+                  .arg(url));
 }
 
 /****************************************************************
@@ -1404,20 +1630,20 @@ void MainWindow::refreshRecentMenus()
         const QString &path = historyRecentLocal.at(i);
         QAction *act = recentLocalMenu->addAction(path);
         connect(act, &QAction::triggered, this, [this, path]()
-        {
-            loadRequirementsFromFile(path);
-        });
+                {
+                    loadRequirementsFromFile(path);
+                });
     }
     if (!historyRecentLocal.isEmpty())
     {
         recentLocalMenu->addSeparator();
         QAction *clearLocal = recentLocalMenu->addAction(tr("Clear Local History"));
         connect(clearLocal, &QAction::triggered, this, [this]()
-        {
-            historyRecentLocal.clear();
-            refreshRecentMenus();
-            saveHistory();
-        });
+                {
+                    historyRecentLocal.clear();
+                    refreshRecentMenus();
+                    saveHistory();
+                });
     }
 
     // Populate Recent Web
@@ -1426,20 +1652,20 @@ void MainWindow::refreshRecentMenus()
         const QString &url = historyRecentWeb.at(i);
         QAction *act = recentWebMenu->addAction(url);
         connect(act, &QAction::triggered, this, [this, url]()
-        {
-            loadRequirementsFromUrl(url);
-        });
+                {
+                    loadRequirementsFromUrl(url);
+                });
     }
     if (!historyRecentWeb.isEmpty())
     {
         recentWebMenu->addSeparator();
         QAction *clearWeb = recentWebMenu->addAction(tr("Clear Web History"));
         connect(clearWeb, &QAction::triggered, this, [this]()
-        {
-            historyRecentWeb.clear();
-            refreshRecentMenus();
-            saveHistory();
-        });
+                {
+                    historyRecentWeb.clear();
+                    refreshRecentMenus();
+                    saveHistory();
+                });
     }
 }
 
@@ -1475,7 +1701,7 @@ void MainWindow::saveAppSettings()
     validateAppSettings();
     QSettings settings;
     settings.setValue("app/maxItems", maxHistoryItems);
-    statusBar()->showMessage(tr("Settings saved"), 2000);
+    statusBar->showMessage(tr("Settings saved"), 2000);
     if (maxHistoryItems != -1)
     {
         while (historyRecentLocal.size() > maxHistoryItems)
@@ -1511,7 +1737,7 @@ void MainWindow::validateAppSettings()
  ***************************************************************/
 void MainWindow::applySettingsFromUi()
 {
-    maxHistoryItems = ui->spinMaxItems->value();
+    maxHistoryItems = spinMaxItems->value();
 }
 
 /****************************************************************
@@ -1519,10 +1745,7 @@ void MainWindow::applySettingsFromUi()
  ***************************************************************/
 void MainWindow::updateUiFromSettings()
 {
-    ui->spinMaxItems->setMinimum(-1);
-    ui->spinMaxItems->setMaximum(std::numeric_limits<int>::max());
-    ui->spinMaxItems->setToolTip(tr("-1 = unlimited, 0 not allowed, ≥1 valid"));
-    ui->spinMaxItems->setValue(maxHistoryItems);
+    spinMaxItems->setValue(maxHistoryItems);
 }
 
 /****************************************************************
@@ -1562,7 +1785,6 @@ void MainWindow::writeTableToModel(const QStringList &lines)
     reqWidth += 66;
 
     // Set the splitter sizes
-    QSplitter *splitter = qobject_cast<QSplitter*>(requirementsView->parentWidget());
     if (splitter)
     {
         QList<int> sizes;
@@ -1598,7 +1820,7 @@ void MainWindow::updateProgress(int percent)
 void MainWindow::showCompiledResult(const QString &path)
 {
     appendLog(tr("Successfully compiled: %1").arg(path));
-    statusBar()->showMessage(tr("Compiled successfully"));
+    statusBar->showMessage(tr("Compiled successfully"));
 }
 
 /****************************************************************
@@ -1607,12 +1829,12 @@ void MainWindow::showCompiledResult(const QString &path)
 void MainWindow::showAboutBox()
 {
     QMessageBox::about(this,
-        tr("About Pip Matrix Resolver"),
-        tr("<b>Pip Matrix Resolver</b><br>"
-           "Cross-platform Qt tool to resolve "
-           "Python dependency matrices.<br>"
-           "Version %1").arg(appVersion)
-        );
+                       tr("About Pip Matrix Resolver"),
+                       tr("<b>Pip Matrix Resolver</b><br>"
+                          "Cross-platform Qt tool to resolve "
+                          "Python dependency matrices.<br>"
+                          "Version %1").arg(appVersion)
+                       );
 }
 
 /****************************************************************
@@ -1918,6 +2140,7 @@ void MainWindow::on_webEditButton_clicked()
     s.setValue("history/recentWeb", list);
     refreshHistoryTables();
 }
+
 /****************************************************************
  * @brief Deletes the selected entry from the web history table and QSettings.
  ***************************************************************/
@@ -1971,8 +2194,8 @@ void MainWindow::updateLocalHistoryButtons()
     int rowCount = localHistoryModel->rowCount();
     bool hasSelection = sel->hasSelection();
 
-    ui->localEditButton->setEnabled(hasSelection);
-    ui->localDeleteButton->setEnabled(hasSelection);
+    localEditButton->setEnabled(hasSelection);
+    localDeleteButton->setEnabled(hasSelection);
 
     // Up: enabled if selected and not first row, and more than 1 item
     bool canUp = hasSelection && rowCount > 1;
@@ -1981,7 +2204,7 @@ void MainWindow::updateLocalHistoryButtons()
         QModelIndex idx = sel->currentIndex();
         canUp = idx.isValid() && idx.row() > 0;
     }
-    ui->localUpButton->setEnabled(canUp);
+    localUpButton->setEnabled(canUp);
 
     // Down: enabled if selected and not last row, and more than 1 item
     bool canDown = hasSelection && rowCount > 1;
@@ -1990,7 +2213,7 @@ void MainWindow::updateLocalHistoryButtons()
         QModelIndex idx = sel->currentIndex();
         canDown = idx.isValid() && idx.row() < rowCount - 1;
     }
-    ui->localDownButton->setEnabled(canDown);
+    localDownButton->setEnabled(canDown);
 }
 
 /****************************************************************
@@ -2002,8 +2225,8 @@ void MainWindow::updateWebHistoryButtons()
     int rowCount = webHistoryModel->rowCount();
     bool hasSelection = sel->hasSelection();
 
-    ui->webEditButton->setEnabled(hasSelection);
-    ui->webDeleteButton->setEnabled(hasSelection);
+    webEditButton->setEnabled(hasSelection);
+    webDeleteButton->setEnabled(hasSelection);
 
     // Up: enabled if selected and not first row, and more than 1 item
     bool canUp = hasSelection && rowCount > 1;
@@ -2012,7 +2235,7 @@ void MainWindow::updateWebHistoryButtons()
         QModelIndex idx = sel->currentIndex();
         canUp = idx.isValid() && idx.row() > 0;
     }
-    ui->webUpButton->setEnabled(canUp);
+    webUpButton->setEnabled(canUp);
 
     // Down: enabled if selected and not last row, and more than 1 item
     bool canDown = hasSelection && rowCount > 1;
@@ -2021,7 +2244,7 @@ void MainWindow::updateWebHistoryButtons()
         QModelIndex idx = sel->currentIndex();
         canDown = idx.isValid() && idx.row() < rowCount - 1;
     }
-    ui->webDownButton->setEnabled(canDown);
+    webDownButton->setEnabled(canDown);
 }
 
 /****************************************************************
@@ -2030,10 +2253,10 @@ void MainWindow::updateWebHistoryButtons()
 void MainWindow::saveSettings()
 {
     QSettings s(kOrganizationName, kApplicationName);
-    s.setValue("settings/pythonVersion", ui->pythonVersionEdit->text());
-    s.setValue("settings/pipVersion", ui->pipVersionEdit->text());
-    s.setValue("settings/pipToolsVersion", ui->pipToolsVersionEdit->text());
-    s.setValue("settings/maxItems", ui->spinMaxItems->value());
+    s.setValue("settings/pythonVersion", pythonVersionEdit->text());
+    s.setValue("settings/pipVersion", pipVersionEdit->text());
+    s.setValue("settings/pipToolsVersion", pipToolsVersionEdit->text());
+    s.setValue("settings/maxItems", spinMaxItems->value());
     s.setValue("settings/useCpu", useCpuCheckBox->isChecked());
     s.setValue("settings/cuda", cudaCheckBox->isChecked());
 }
@@ -2052,7 +2275,7 @@ void MainWindow::checkAndRestoreSettings()
         pythonVersion = DEFAULT_PYTHON_VERSION;
         s.setValue("settings/pythonVersion", pythonVersion);
     }
-    ui->pythonVersionEdit->setText(pythonVersion);
+    pythonVersionEdit->setText(pythonVersion);
 
     // pip version
     QString pipVersion = s.value("settings/pipVersion", DEFAULT_PIP_VERSION).toString();
@@ -2061,7 +2284,7 @@ void MainWindow::checkAndRestoreSettings()
         pipVersion = DEFAULT_PIP_VERSION;
         s.setValue("settings/pipVersion", pipVersion);
     }
-    ui->pipVersionEdit->setText(pipVersion);
+    pipVersionEdit->setText(pipVersion);
 
     // pip-tools version
     QString pipToolsVersion = s.value("settings/pipToolsVersion", DEFAULT_PIPTOOLS_VERSION).toString();
@@ -2070,7 +2293,7 @@ void MainWindow::checkAndRestoreSettings()
         pipToolsVersion = DEFAULT_PIPTOOLS_VERSION;
         s.setValue("settings/pipToolsVersion", pipToolsVersion);
     }
-    ui->pipToolsVersionEdit->setText(pipToolsVersion);
+    pipToolsVersionEdit->setText(pipToolsVersion);
 
     // Max items
     int maxItems = s.value("settings/maxItems", DEFAULT_MAX_ITEMS).toInt();
@@ -2079,7 +2302,7 @@ void MainWindow::checkAndRestoreSettings()
         maxItems = DEFAULT_MAX_ITEMS;
         s.setValue("settings/maxItems", maxItems);
     }
-    ui->spinMaxItems->setValue(maxItems);
+    spinMaxItems->setValue(maxItems);
 }
 
 /****************************************************************
@@ -2088,8 +2311,8 @@ void MainWindow::checkAndRestoreSettings()
 void MainWindow::restoreCpuCudaSettings()
 {
     QSettings s(kOrganizationName, kApplicationName);
-    ui->useCpuCheckBox->setChecked(s.value("settings/useCpu", false).toBool());
-    ui->cudaCheckBox->setChecked(s.value("settings/cuda", true).toBool());
+    useCpuCheckBox->setChecked(s.value("settings/useCpu", false).toBool());
+    cudaCheckBox->setChecked(s.value("settings/cuda", true).toBool());
 }
 
 /****************************************************************
@@ -2111,8 +2334,10 @@ void MainWindow::detectSystem()
 #elif defined(Q_OS_LINUX)
     os = "Linux";
     QFile f("/etc/os-release");
-    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        while (!f.atEnd()) {
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        while (!f.atEnd())
+        {
             QString line = f.readLine();
             if (line.startsWith("ID=")) release = line.mid(3).trimmed().replace("\"", "");
             if (line.startsWith("VERSION_ID=")) version = line.mid(11).trimmed().replace("\"", "");
@@ -2145,8 +2370,9 @@ void MainWindow::detectSystem()
     if (!gpuDetected)
     {
         gpuDetected = detectNvidiaGpu();
-        ui->gpuDetectedCheckBox->setChecked(gpuDetected);
     }
+    gpuDetectedCheckBox->setChecked(gpuDetected);
+
     // Save to QSettings
     QSettings s(kOrganizationName, kApplicationName);
     s.setValue("settings/os", os);
@@ -2155,11 +2381,11 @@ void MainWindow::detectSystem()
     s.setValue("settings/gpuDetected", gpuDetected);
     if (gpuDetected)
     {
-        ui->statusbar->showMessage(tr("GPU Detected"));
+        statusBar->showMessage(tr("GPU Detected"));
     }
     else
     {
-        ui->statusbar->showMessage(tr("GPU Not Detected"));
+        statusBar->showMessage(tr("GPU Not Detected"));
     }
 }
 
@@ -2180,8 +2406,8 @@ void MainWindow::onCreateVenv()
     proc.start(script, args);
     proc.waitForFinished(-1);
     QString output = proc.readAllStandardOutput();
-    ui->statusbar->showMessage(tr("Switching to Terminal tab. Created/Updated venv_running: %1").arg(output));
-    ui->mainTabs->setCurrentWidget(ui->tabTerminal);
+    statusBar->showMessage(tr("Switching to Terminal tab. Created/Updated venv_running: %1").arg(output));
+    mainTabs->setCurrentWidget(tabTerminal);
 }
 
 /****************************************************************
@@ -2206,8 +2432,6 @@ bool MainWindow::detectGpuViaPowerShell()
     proc.start("powershell", QStringList() << "-Command" << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    // Debug: print output if needed
-    // QMessageBox::information(nullptr, "PowerShell GPU Output", output);
     return output.contains("NVIDIA", Qt::CaseInsensitive);
 }
 
@@ -2221,13 +2445,12 @@ bool MainWindow::detectGpuViaDxDiag()
     proc.waitForFinished();
     QFile file("dxdiag.txt");
     bool found = false;
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
         QString dxdiagOutput = file.readAll();
         found = dxdiagOutput.contains("NVIDIA", Qt::CaseInsensitive);
         file.remove(); // Clean up
     }
-    // Debug: print output if needed
-    // QMessageBox::information(nullptr, "dxdiag GPU Output", dxdiagOutput);
     return found;
 }
 
@@ -2240,8 +2463,6 @@ bool MainWindow::detectGpuViaNvidiaSmi()
     proc.start("nvidia-smi");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    // Debug: print output if needed
-    // QMessageBox::information(nullptr, "nvidia-smi Output", output);
     return output.contains("NVIDIA", Qt::CaseInsensitive);
 }
 
@@ -2265,10 +2486,10 @@ bool MainWindow::detectNvidiaGpu()
  ***************************************************************/
 void MainWindow::onRunCommand()
 {
-    QString command = ui->commandInput->text().trimmed();
+    QString command = commandInput->text().trimmed();
     if (command.isEmpty())
     {
-        ui->terminalOutput->appendPlainText("No command entered.");
+        terminalOutput->appendPlainText("No command entered.");
         return;
     }
 
@@ -2326,12 +2547,12 @@ void MainWindow::onRunCommand()
     QString error = process.readAllStandardError();
 
     if (usedVenv)
-        ui->terminalOutput->appendPlainText("[venv] " + command);
+        terminalOutput->appendPlainText("[venv] " + command);
 
     if (!output.isEmpty())
-        ui->terminalOutput->appendPlainText(output);
+        terminalOutput->appendPlainText(output);
     if (!error.isEmpty())
-        ui->terminalOutput->appendPlainText("[ERROR] " + error);
+        terminalOutput->appendPlainText("[ERROR] " + error);
 }
 
 /****************************************************************
@@ -2339,7 +2560,7 @@ void MainWindow::onRunCommand()
  ***************************************************************/
 void MainWindow::onClearTerminal()
 {
-    ui->terminalOutput->clear();
+    terminalOutput->clear();
 }
 
 /****************************************************************
@@ -2347,9 +2568,10 @@ void MainWindow::onClearTerminal()
  ***************************************************************/
 void MainWindow::onSearchPackage()
 {
-    QString pkg = ui->packageNameInput->text().trimmed();
-    if (pkg.isEmpty()) {
-        ui->packageOutput->appendPlainText("Enter a package name to search.");
+    QString pkg = packageNameInput->text().trimmed();
+    if (pkg.isEmpty())
+    {
+        packageOutput->appendPlainText("Enter a package name to search.");
         return;
     }
     QProcess process;
@@ -2365,9 +2587,9 @@ void MainWindow::onSearchPackage()
     QString output = process.readAllStandardOutput();
     QString error = process.readAllStandardError();
     if (!output.isEmpty())
-        ui->packageOutput->appendPlainText(output);
+        packageOutput->appendPlainText(output);
     if (!error.isEmpty())
-        ui->packageOutput->appendPlainText("[ERROR] " + error);
+        packageOutput->appendPlainText("[ERROR] " + error);
 }
 
 /****************************************************************
@@ -2375,9 +2597,10 @@ void MainWindow::onSearchPackage()
  ***************************************************************/
 void MainWindow::onInstallPackage()
 {
-    QString pkg = ui->packageNameInput->text().trimmed();
-    if (pkg.isEmpty()) {
-        ui->packageOutput->appendPlainText("Enter a package name to install.");
+    QString pkg = packageNameInput->text().trimmed();
+    if (pkg.isEmpty())
+    {
+        packageOutput->appendPlainText("Enter a package name to install.");
         return;
     }
     QProcess process;
@@ -2393,9 +2616,9 @@ void MainWindow::onInstallPackage()
     QString output = process.readAllStandardOutput();
     QString error = process.readAllStandardError();
     if (!output.isEmpty())
-        ui->packageOutput->appendPlainText(output);
+        packageOutput->appendPlainText(output);
     if (!error.isEmpty())
-        ui->packageOutput->appendPlainText("[ERROR] " + error);
+        packageOutput->appendPlainText("[ERROR] " + error);
 }
 
 /****************************************************************
@@ -2403,9 +2626,10 @@ void MainWindow::onInstallPackage()
  ***************************************************************/
 void MainWindow::onUninstallPackage()
 {
-    QString pkg = ui->packageNameInput->text().trimmed();
-    if (pkg.isEmpty()) {
-        ui->packageOutput->appendPlainText("Enter a package name to uninstall.");
+    QString pkg = packageNameInput->text().trimmed();
+    if (pkg.isEmpty())
+    {
+        packageOutput->appendPlainText("Enter a package name to uninstall.");
         return;
     }
     QProcess process;
@@ -2421,17 +2645,17 @@ void MainWindow::onUninstallPackage()
     QString output = process.readAllStandardOutput();
     QString error = process.readAllStandardError();
     if (!output.isEmpty())
-        ui->packageOutput->appendPlainText(output);
+        packageOutput->appendPlainText(output);
     if (!error.isEmpty())
-        ui->packageOutput->appendPlainText("[ERROR] " + error);
+        packageOutput->appendPlainText("[ERROR] " + error);
 }
 
 /****************************************************************
- * @brief .
+ * @brief Refreshes the list of installed packages in venv.
  ***************************************************************/
 void MainWindow::refreshInstalledPackages()
 {
-    ui->installedPackagesList->clear();
+    installedPackagesList->clear();
     QProcess process;
     QString venvPython;
 #if defined(Q_OS_WIN)
@@ -2446,53 +2670,22 @@ void MainWindow::refreshInstalledPackages()
     QStringList lines = output.split('\n', Qt::SkipEmptyParts);
     for (int i = 0; i < lines.size(); ++i)
     {
-        ui->installedPackagesList->addItem(lines.at(i));
+        installedPackagesList->addItem(lines.at(i));
     }
 }
 
 /****************************************************************
- * @brief .
+ * @brief Handles double-click on installed package list item.
+ * @param index The model index of the double-clicked item.
  ***************************************************************/
 void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
 {
-    QString pkg = ui->installedPackagesList->item(index.row())->text().split('=')[0];
-    ui->packageNameInput->setText(pkg);
+    QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
+    packageNameInput->setText(pkg);
     onUninstallPackage();
 }
 
-/****************************************************************
- * @brief Example function to run a Python script.
- * runPythonScript("C:/path/to/MuseTalk/main.py");
- ***************************************************************/
-void runPythonScript(const QString &scriptPath)
-{
-    QProcess process;
-    QString pythonExe = "python"; // or full path to python.exe in your venv
-    QStringList arguments;
-    arguments << scriptPath;
-
-    process.start(pythonExe, arguments);
-    process.waitForFinished();
-
-    QString output = process.readAllStandardOutput();
-    QString error = process.readAllStandardError();
-
-    qDebug() << "Output:" << output;
-    qDebug() << "Error:" << error;
-}
-/****************************************************************
- * @brief .
- ***************************************************************/
-
-/****************************************************************
- * @brief .
- ***************************************************************/
-
-/****************************************************************
- * @brief .
- ***************************************************************/
-
-/************** End of MainWindow.cpp **************************/
+/************** End of MainWindow.cpp ***************************/
 
 #-------------------------------------------------------------------------------
 # File: src/MainWindow.h
@@ -2502,13 +2695,13 @@ void runPythonScript(const QString &scriptPath)
  * @brief Declares the main application window class.
  *
  * @author Jeffrey Scott Flesher
- * @version 0.6
- * @date    2025-11-01
+ * @version 0.7
+ * @date    2025-11-03
  * @section License Unlicensed, MIT, or any.
  * @section DESCRIPTION
  * Main window interface for PipMatrixResolver Qt application.
  * Includes settings API, history, menus, and shared loaders for
- * files and URLs. Uses C-style braces.
+ * files and URLs. Uses C-style braces. Now with dynamic UI.
  ***************************************************************/
 
 #pragma once
@@ -2520,6 +2713,9 @@ void runPythonScript(const QString &scriptPath)
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QMenu>
+#include <QMenuBar>
+#include <QToolBar>
+#include <QStatusBar>
 #include <QAction>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -2530,15 +2726,20 @@ void runPythonScript(const QString &scriptPath)
 #include <QDialog>
 #include <QTextBrowser>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFormLayout>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QSettings>
 #include <QDateTime>
 #include <QDebug>
-
-QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
-QT_END_NAMESPACE
+#include <QTabWidget>
+#include <QSplitter>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QListWidget>
+#include "CommandsTab.h"
 
 /****************************************************************
  * @class MainWindow
@@ -2608,8 +2809,8 @@ private slots:
     void refreshInstalledPackages();
     void onInstalledPackagesListDoubleClicked(const QModelIndex &index);
 
-
 private:
+    void setupUi();
     void loadRequirementsFromFile(const QString &path);
     void loadRequirementsFromUrl(const QString &url);
     void saveHistory();
@@ -2649,26 +2850,97 @@ private:
     QStringList historyRecentLocal;
     QStringList historyRecentWeb;
 
-    // UI pointers
-    Ui::MainWindow *ui;
+    // UI widgets - Main Window
+    QWidget *centralWidget;
+    QTabWidget *mainTabs;
+    QMenuBar *menuBar;
+    QToolBar *mainToolBar;
+    QStatusBar *statusBar;
+
+    // Menus
+    QMenu *menuFile;
+    QMenu *menuTools;
+    QMenu *menuBatch;
+    QMenu *menuHelp;
+
+    // Tab: Commands
+    QWidget *tabCommands;
+    CommandsTab *commandsTab;
+
+    // Actions
+    QAction *actionOpenRequirements;
+    QAction *actionFetchRequirements;
+    QAction *actionExit;
+    QAction *actionCreateVenv;
+    QAction *actionResolveMatrix;
+    QAction *actionPause;
+    QAction *actionResume;
+    QAction *actionStop;
+    QAction *actionRunBatch;
+    QAction *actionAbout;
+    QAction *actionViewReadme;
+
+    // Tab: Main
+    QWidget *tabMain;
+    QSplitter *splitter;
+    QSplitter *bottomSplitter;
     QStandardItemModel *requirementsModel;
     QTableView *requirementsView;
+    QTableView *matrixView;
     QPlainTextEdit *logView;
+    QProgressBar *progress;
+
+    // Tab: History
+    QWidget *tabHistory;
     QTableView *localHistoryTable;
     QTableView *webHistoryTable;
     QStandardItemModel *localHistoryModel;
     QStandardItemModel *webHistoryModel;
-    QProgressBar *progress;
-    QMenu *recentLocalMenu;
-    QMenu *recentWebMenu;
+    QPushButton *localAddButton;
+    QPushButton *localEditButton;
+    QPushButton *localDeleteButton;
+    QPushButton *localUpButton;
+    QPushButton *localDownButton;
+    QPushButton *webAddButton;
+    QPushButton *webEditButton;
+    QPushButton *webDeleteButton;
+    QPushButton *webUpButton;
+    QPushButton *webDownButton;
 
-    // Settings tab widgets
+    // Tab: Terminal
+    QWidget *tabTerminal;
+    QPlainTextEdit *terminalOutput;
+    QLineEdit *commandInput;
+    QPushButton *runCommandBtn;
+    QPushButton *clearTerminalBtn;
+
+    // Tab: Package Manager
+    QWidget *tabPackageManager;
+    QLineEdit *packageNameInput;
+    QPushButton *searchPackageBtn;
+    QPushButton *installPackageBtn;
+    QPushButton *uninstallPackageBtn;
+    QListWidget *installedPackagesList;
+    QPlainTextEdit *packageOutput;
+
+    // Tab: Settings
+    QWidget *tabSettings;
+    QLineEdit *pythonVersionEdit;
+    QLineEdit *pipVersionEdit;
+    QLineEdit *pipToolsVersionEdit;
+    QSpinBox *spinMaxItems;
     QCheckBox *gpuDetectedCheckBox;
     QCheckBox *useCpuCheckBox;
     QCheckBox *cudaCheckBox;
     QLineEdit *osEdit;
     QLineEdit *osReleaseEdit;
     QLineEdit *osVersionEdit;
+    QPushButton *saveSettingsButton;
+    QPushButton *restoreDefaultsButton;
+    QDialogButtonBox *buttonBoxPreferences;
+
+    QMenu *recentLocalMenu;
+    QMenu *recentWebMenu;
 
     // Venv paths
     QString venvRunningPath;
@@ -2678,7 +2950,7 @@ private:
     int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
 };
 
-/************** End of MainWindow.h **************************/
+/************** End of MainWindow.h ****************************/
 
 #-------------------------------------------------------------------------------
 # File: src/MainWindow.ui
@@ -3425,7 +3697,7 @@ TEST(ResolverEngineTest, BasicSanity)
 # Directory Structure
 #-------------------------------------------------------------------------------
 ├── .qtcreator
-│   ├── qtc-cmake-presets-vRRckuMy
+│   ├── qtc-cmake-presets-NtZsHeFT
 │   └── CMakeLists.txt.user
 ├── icons
 │   ├── app.svg
@@ -3473,7 +3745,9 @@ TEST(ResolverEngineTest, BasicSanity)
 ├── LICENSE
 ├── PipMatrixResolverQt.qrc
 ├── README.md
+├── The.Plan.txt
 ├── cleanbash.sh
+├── mainwindow_cpp.txt
 ├── requirements.txt
 ├── src2txt.bat
 └── src2txt.sh

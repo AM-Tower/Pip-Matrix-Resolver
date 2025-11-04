@@ -48,6 +48,7 @@
 #include <QSpinBox>
 #include <QListWidget>
 #include "CommandsTab.h"
+#include "TerminalEngine.h"
 
 /****************************************************************
  * @class MainWindow
@@ -108,6 +109,7 @@ private slots:
 
     void onRunCommand();
     void onClearTerminal();
+    void onStopCommand();
 
     // Package Manager tab
     void onSearchPackage();
@@ -116,6 +118,12 @@ private slots:
 
     void refreshInstalledPackages();
     void onInstalledPackagesListDoubleClicked(const QModelIndex &index);
+
+    // Terminal engine slots
+    void onTerminalOutput(const QString &output, bool isError);
+    void onTerminalCommandStarted(const QString &command);
+    void onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void onVenvProgress(const QString &message);
 
 private:
     void setupUi();
@@ -153,6 +161,7 @@ private:
     QString normalizeRawUrl(const QString &inputUrl);
     bool downloadText(const QString &url, QByteArray &out);
     QString logsDir();
+    void appendTerminalOutput(const QString &text, bool isError);
 
     // History data
     QStringList historyRecentLocal;
@@ -170,10 +179,6 @@ private:
     QMenu *menuTools;
     QMenu *menuBatch;
     QMenu *menuHelp;
-
-    // Tab: Commands
-    QWidget *tabCommands;
-    CommandsTab *commandsTab;
 
     // Actions
     QAction *actionOpenRequirements;
@@ -221,6 +226,7 @@ private:
     QLineEdit *commandInput;
     QPushButton *runCommandBtn;
     QPushButton *clearTerminalBtn;
+    QPushButton *stopCommandBtn;
 
     // Tab: Package Manager
     QWidget *tabPackageManager;
@@ -230,6 +236,10 @@ private:
     QPushButton *uninstallPackageBtn;
     QListWidget *installedPackagesList;
     QPlainTextEdit *packageOutput;
+
+    // Tab: Commands
+    QWidget *tabCommands;
+    CommandsTab *commandsTab;
 
     // Tab: Settings
     QWidget *tabSettings;
@@ -253,6 +263,9 @@ private:
     // Venv paths
     QString venvRunningPath;
     QString venvTestingPath;
+
+    // Terminal engine
+    TerminalEngine *terminalEngine;
 
     // Settings
     int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid

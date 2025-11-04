@@ -1,0 +1,116 @@
+Functional comparison between bash scripts and Qt app
+The Qt app currently provides the skeleton UI and subprocess wrappers, but it does not yet implement the full resolver pipeline your bash scripts perform. Below is a precise, side‑by‑side mapping of capabilities, gaps, and how to implement parity.
+
+Capability parity table
+
+
+What needs to be implemented
+• 	Requirements ingestion and preprocessing
+• 	Download  from URL or file.
+• 	Normalize lines, strip comments/CRLF, expand extras like  to companions.
+• 	Optional GPU/CPU substitution pipeline mirroring bash.
+• 	PyPI candidate discovery
+• 	For each base package, query available stable versions and compute candidate lists: floor + next MATRIX_RANGE latest patch per minor.
+• 	Persist candidates and original base names for reproducible iteration.
+• 	Matrix iterator with resume
+• 	Maintain  with per‑pkg candidate arrays, indices, and max indices.
+• 	Implement odometer increment and resume from .
+• 	Compile and validate loop
+• 	For each combination:
+• 	Write .
+• 	Run  with retries.
+• 	On success, validate in a pristine venv: , , and an optional import test command.
+• 	On first success, move compiled file to , clean up, and emit success.
+• 	Venv bootstrap parity
+• 	Create  and  with Python version selection.
+• 	Pin  and ; verify installed versions.
+• 	Settings/config
+• 	Surface the bash flags in a Qt settings dialog or JSON config:
+• 	python version, pip/pip‑tools versions
+• 	retries, timeouts, range, range‑max
+• 	dry‑run, debug, clean cache, import‑test command
+• 	Log analysis
+• 	Parse  stderr for common failure patterns and adjust baselines or report actionable messages.
+
+Implementation plan in Qt (concrete steps)
+1) Add a shared config model
+• 	Create  to hold:
+• 	pythonVer, pipVer, pipToolsVer, matrixRange, matrixRangeMax
+• 	pipTimeout, pipRetries, dryRun, debugMode, cleanCache
+• 	importTestCmd
+• 	Load/save to  in repo root. Bind to a “Settings” dialog.
+2) Wire VenvManager to parity with bash
+• 	Add methods:
+• 	 that returns python path and performs:
+• 	create venv
+• 	upgrade pip/setuptools/wheel to exact versions
+• 	upgrade pip‑tools to exact version
+• 	verify pinned versions; emit log messages and return false on mismatch
+• 	 similar to compile venv; optionally skip removal when debugMode=true
+• 	Add / and  support to  with arguments (e.g.,  and ).
+3) Implement requirements ingestion and preprocessing
+• 	In :
+• 	:
+• 	Read lines, strip comments/blank, trim, CRLF → LF
+• 	Expand extras via a local mapping (mirror  from bash)
+• 	Write  and 
+• 	:
+• 	Download to , then preprocess into 
+• 	Extras expansion mapping example:
+
+4) PyPI candidate discovery
+• 	Add  to query versions:
+• 	Call  via  using the compile venv’s python.
+• 	Parse “Available versions:” line, normalize, filter out pre‑releases (, , ).
+• 	Group by major.minor prefix and pick latest patch per prefix.
+• 	Compute floor + next  candidates given an operator and version (support  pin or default floor).
+• 	Populate :
+
+5) Matrix iteration, constraints writing, and pip-compile with retries
+• 	Implement :
+• 	Create 
+• 	For each package at current index, emit  (or just  if no candidates found)
+• 	Build  for logging
+• 	Use  with:
+• 	
+• 	Capture stderr to  for analysis
+• 	Enhance  to:
+• 	Emit signals with detected issues (“No matching distribution found for X” or “A requires B<2.0…”)
+• 	Optionally notify  to adjust baselines if you want auto‑tuning
+6) Validation step
+• 	Add :
+• 	Create a fresh validation venv ().
+• 	Run  with retries and timeout.
+• 	Run  and log warnings.
+• 	If  set, run:  and require success.
+• 	On success: emit , move compiled file to , clear state.
+• 	Cleanup venv unless .
+7) Resume and loop control with pause/resume/stop
+• 	Maintain  exactly like bash:
+• 	Read on start; write on each attempt.
+• 	The main loop in  should:
+• 	Respect  and  flags.
+• 	On compilation failure: write to , then .
+• 	On exhaustion: copy/sort fail log, emit a terminal message and stop.
+
+Example code snippets to drop in now
+ResolverEngine: build constraints and iterate
+
+VenvManager: create compile venv and pin versions
+
+PipToolsRunner: pipe stderr to file for analysis
+
+
+Prioritized, incremental roadmap
+1. 	Implement requirements ingestion + extras expansion (UI → ).
+2. 	Create compile venv with pinned pip/pip‑tools and expose python path ().
+3. 	Build  to query versions and compute candidate arrays.
+4. 	Fill , , ; implement .
+5. 	Use  to compile with retries; improve log analysis and UI logs.
+6. 	Add validation venv and import test step; emit success and move compiled file to .
+7. 	Add settings dialog and  to mirror bash flags.
+8. 	Add pause/resume/cancel responsiveness to subprocesses (cooperative kill and cleanup).
+9. 	Add fail/possibilities logs, resume state file handling, and end‑of‑run summaries in UI.
+
+Direct answer
+Right now, the Qt app does not mimic the bash script’s resolver behavior. It has the UI, venv creation, a simple pip‑compile wrapper, and control signals, but the core features—requirements preprocessing, candidate discovery from PyPI, full odometer iteration with retries and validation—are missing. Implement the steps above, starting with requirements ingestion and candidate generation, then the compile‑validate loop with venv parity. This will bring the Qt app to functional equivalence with your bash scripts while keeping your logging, resume, and control semantics intact.

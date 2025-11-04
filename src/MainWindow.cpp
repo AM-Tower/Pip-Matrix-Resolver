@@ -85,6 +85,8 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect Terminal tab
     connect(runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
     connect(clearTerminalBtn, &QPushButton::clicked, this, &MainWindow::onClearTerminal);
+    connect(stopCommandBtn, &QPushButton::clicked, this, &MainWindow::onStopCommand);
+    connect(commandInput, &QLineEdit::returnPressed, this, &MainWindow::onRunCommand);
 
     // Connect Package Manager tab
     connect(searchPackageBtn, &QPushButton::clicked, this, &MainWindow::onSearchPackage);
@@ -228,10 +230,14 @@ void MainWindow::setupUi()
 
     QHBoxLayout *terminalCommandLayout = new QHBoxLayout();
     commandInput = new QLineEdit(tabTerminal);
-    runCommandBtn = new QPushButton(tr("Run Command"), tabTerminal);
+    commandInput->setPlaceholderText("Enter command...");
+    runCommandBtn = new QPushButton(tr("Run"), tabTerminal);
     clearTerminalBtn = new QPushButton(tr("Clear"), tabTerminal);
+    stopCommandBtn = new QPushButton(tr("Stop"), tabTerminal);
+    stopCommandBtn->setEnabled(false);
     terminalCommandLayout->addWidget(commandInput);
     terminalCommandLayout->addWidget(runCommandBtn);
+    terminalCommandLayout->addWidget(stopCommandBtn);
     terminalCommandLayout->addWidget(clearTerminalBtn);
     terminalLayout->addLayout(terminalCommandLayout);
 
@@ -364,7 +370,7 @@ void MainWindow::setupUi()
     menuTools = new QMenu(tr("&Tools"), this);
     menuBar->addMenu(menuTools);
 
-    actionCreateVenv = new QAction(QIcon(":/icons/icons/venv.svg"), tr("Create/Update venv"), this);
+    actionCreateVenv = new QAction(QIcon(":/icons/icons/venv.svg"), tr("Create venv"), this);
     menuTools->addAction(actionCreateVenv);
 
     actionResolveMatrix = new QAction(QIcon(":/icons/icons/resolve.svg"), tr("Resolve matrix"), this);
@@ -1370,20 +1376,170 @@ void MainWindow::detectSystem()
  ***************************************************************/
 void MainWindow::onCreateVenv()
 {
-    // Check if python, pip, or pip-tools settings have changed
-    // If so, rebuild venv_running
-    // (You can compare current settings to those saved in QSettings)
+    // Get Python version from settings
+    QString pythonVersion = pythonVersionEdit->text().trimmed();
+    if (pythonVersion.isEmpty())
+    {
+        pythonVersion = DEFAULT_PYTHON_VERSION;
+    }
 
-    // Call your bash script using QProcess
-    QProcess proc;
-    QString script = "/path/to/pip-matrix-common.sh";
-    QStringList args;
-    args << "--create-venv-running"; // You can define this flag in your script
-    proc.start(script, args);
-    proc.waitForFinished(-1);
-    QString output = proc.readAllStandardOutput();
-    statusBar->showMessage(tr("Switching to Terminal tab. Created/Updated venv_running: %1").arg(output));
+    // Get pip and pip-tools versions
+    QString pipVersion = pipVersionEdit->text().trimmed();
+    QString pipToolsVersion = pipToolsVersionEdit->text().trimmed();
+
+    // Set venv path
+    QString venvPath = QDir::currentPath() + "/.venv";
+    terminalEngine->setVenvPath(venvPath);
+
+    // Switch to terminal tab
     mainTabs->setCurrentWidget(tabTerminal);
+
+    // Clear terminal and show progress
+    terminalOutput->clear();
+    appendTerminalOutput("=== Creating Virtual Environment ===", false);
+    appendTerminalOutput(QString("Python version: %1").arg(pythonVersion), false);
+    appendTerminalOutput(QString("Virtual environment path: %1").arg(venvPath), false);
+    appendTerminalOutput("", false);
+
+    // Create venv in a separate thread would be better, but for now we'll use direct call
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    runCommandBtn->setEnabled(false);
+    stopCommandBtn->setEnabled(false);
+
+    bool success = terminalEngine->createVirtualEnvironment(pythonVersion);
+
+    runCommandBtn->setEnabled(true);
+    stopCommandBtn->setEnabled(false);
+    QApplication::restoreOverrideCursor();
+
+    if (success)
+    {
+        appendTerminalOutput("", false);
+        appendTerminalOutput("=== Virtual Environment Ready ===", false);
+        appendTerminalOutput("You can now run Python commands, pip, and pip-tools", false);
+        statusBar->showMessage(tr("Virtual environment created successfully"), 5000);
+    }
+    else
+    {
+        appendTerminalOutput("", false);
+        appendTerminalOutput("=== Virtual Environment Creation Failed ===", true);
+        statusBar->showMessage(tr("Failed to create virtual environment"), 5000);
+    }
+}
+
+/****************************************************************
+ * @brief on Run Command.
+ ***************************************************************/
+void MainWindow::onRunCommand()
+{
+    QString command = commandInput->text().trimmed();
+    if (command.isEmpty())
+    {
+        return;
+    }
+
+    // Clear input
+    commandInput->clear();
+
+    // Execute command
+    terminalEngine->executeCommand(command);
+}
+
+/****************************************************************
+ * @brief on Clear Terminal.
+ ***************************************************************/
+void MainWindow::onClearTerminal()
+{
+    terminalOutput->clear();
+}
+
+/****************************************************************
+ * @brief on Stop Command.
+ ***************************************************************/
+void MainWindow::onStopCommand()
+{
+    terminalEngine->stopCurrentProcess();
+}
+
+/****************************************************************
+ * @brief Handles terminal output from TerminalEngine.
+ ***************************************************************/
+void MainWindow::onTerminalOutput(const QString &output, bool isError)
+{
+    appendTerminalOutput(output, isError);
+}
+
+/****************************************************************
+ * @brief Handles terminal command started event.
+ ***************************************************************/
+void MainWindow::onTerminalCommandStarted(const QString &command)
+{
+    runCommandBtn->setEnabled(false);
+    stopCommandBtn->setEnabled(true);
+    statusBar->showMessage(QString("Executing: %1").arg(command));
+}
+
+/****************************************************************
+ * @brief Handles terminal command finished event.
+ ***************************************************************/
+void MainWindow::onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    runCommandBtn->setEnabled(true);
+    stopCommandBtn->setEnabled(false);
+
+    if (exitStatus == QProcess::NormalExit && exitCode == 0)
+    {
+        statusBar->showMessage(tr("Command completed successfully"), 3000);
+    }
+    else
+    {
+        statusBar->showMessage(tr("Command failed"), 3000);
+    }
+}
+
+/****************************************************************
+ * @brief Handles venv progress messages.
+ ***************************************************************/
+void MainWindow::onVenvProgress(const QString &message)
+{
+    appendTerminalOutput(message, false);
+    QApplication::processEvents(); // Update UI
+}
+
+/****************************************************************
+ * @brief Helper to append text to terminal output with color.
+ ***************************************************************/
+void MainWindow::appendTerminalOutput(const QString &text, bool isError)
+{
+    if (text.isEmpty())
+    {
+        terminalOutput->appendPlainText("");
+        return;
+    }
+
+    QTextCursor cursor = terminalOutput->textCursor();
+    cursor.movePosition(QTextCursor::End);
+
+    QTextCharFormat format;
+    if (isError)
+    {
+        format.setForeground(QColor(Qt::red));
+    }
+    else if (text.startsWith("===") || text.startsWith("$"))
+    {
+        format.setForeground(QColor(Qt::blue));
+        format.setFontWeight(QFont::Bold);
+    }
+    else
+    {
+        format.setForeground(QColor(Qt::black));
+    }
+
+    cursor.setCharFormat(format);
+    cursor.insertText(text + "\n");
+
+    terminalOutput->setTextCursor(cursor);
+    terminalOutput->ensureCursorVisible();
 }
 
 /****************************************************************
@@ -1458,88 +1614,6 @@ bool MainWindow::detectNvidiaGpu()
 }
 
 /****************************************************************
- * @brief on Run Command.
- ***************************************************************/
-void MainWindow::onRunCommand()
-{
-    QString command = commandInput->text().trimmed();
-    if (command.isEmpty())
-    {
-        terminalOutput->appendPlainText("No command entered.");
-        return;
-    }
-
-    QProcess process;
-    QString venvPython;
-#if defined(Q_OS_WIN)
-    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
-#else
-    venvPython = QDir::current().filePath("venv_running/bin/python");
-#endif
-
-    QStringList args;
-    bool usedVenv = false;
-
-    if (command.startsWith("pip "))
-    {
-        args << "-m" << "pip";
-        args << command.mid(4).split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else if (command.startsWith("pip-compile"))
-    {
-        args << "-m" << "piptools" << "compile";
-        QString rest = command.mid(QString("pip-compile").length()).trimmed();
-        if (!rest.isEmpty()) args << rest.split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else if (command.startsWith("pip-sync"))
-    {
-        args << "-m" << "piptools" << "sync";
-        QString rest = command.mid(QString("pip-sync").length()).trimmed();
-        if (!rest.isEmpty()) args << rest.split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else if (command.startsWith("python "))
-    {
-        args = command.mid(7).split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else
-    {
-#if defined(Q_OS_WIN)
-        process.start("cmd.exe", QStringList() << "/C" << command);
-#else
-        process.start("bash", QStringList() << "-c" << command);
-#endif
-    }
-
-    process.waitForFinished();
-    QString output = process.readAllStandardOutput();
-    QString error = process.readAllStandardError();
-
-    if (usedVenv)
-        terminalOutput->appendPlainText("[venv] " + command);
-
-    if (!output.isEmpty())
-        terminalOutput->appendPlainText(output);
-    if (!error.isEmpty())
-        terminalOutput->appendPlainText("[ERROR] " + error);
-}
-
-/****************************************************************
- * @brief on Clear Terminal.
- ***************************************************************/
-void MainWindow::onClearTerminal()
-{
-    terminalOutput->clear();
-}
-
-/****************************************************************
  * @brief on Search Package.
  ***************************************************************/
 void MainWindow::onSearchPackage()
@@ -1561,11 +1635,21 @@ void MainWindow::onSearchPackage()
     process.start(venvPython, args);
     process.waitForFinished();
     QString output = process.readAllStandardOutput();
-    QString error = process.readAllStandardError();
-    if (!output.isEmpty())
-        packageOutput->appendPlainText(output);
-    if (!error.isEmpty())
-        packageOutput->appendPlainText("[ERROR] " + error);
+    QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        installedPackagesList->addItem(lines.at(i));
+    }
+}
+
+/****************************************************************
+ * @brief On Installed Packages List Double Clicked.
+ ***************************************************************/
+void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
+{
+    QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
+    packageNameInput->setText(pkg);
+    onUninstallPackage();
 }
 
 /****************************************************************
@@ -1659,6 +1743,177 @@ void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
     QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
     packageNameInput->setText(pkg);
     onUninstallPackage();
+}
+
+/****************************************************************
+ * @brief on Create Venv.
+ ***************************************************************/
+void MainWindow::onCreateVenv()
+{
+    // Get Python version from settings
+    QString pythonVersion = pythonVersionEdit->text().trimmed();
+    if (pythonVersion.isEmpty())
+    {
+        pythonVersion = DEFAULT_PYTHON_VERSION;
+    }
+
+    // Get pip and pip-tools versions
+    QString pipVersion = pipVersionEdit->text().trimmed();
+    QString pipToolsVersion = pipToolsVersionEdit->text().trimmed();
+
+    // Set venv path
+    QString venvPath = QDir::currentPath() + "/.venv";
+    terminalEngine->setVenvPath(venvPath);
+
+    // Switch to terminal tab
+    mainTabs->setCurrentWidget(tabTerminal);
+
+    // Clear terminal and show progress
+    terminalOutput->clear();
+    appendTerminalOutput("=== Creating Virtual Environment ===", false);
+    appendTerminalOutput(QString("Python version: %1").arg(pythonVersion), false);
+    appendTerminalOutput(QString("Virtual environment path: %1").arg(venvPath), false);
+    appendTerminalOutput("", false);
+
+    // Create venv in a separate thread would be better, but for now we'll use direct call
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    runCommandBtn->setEnabled(false);
+    stopCommandBtn->setEnabled(false);
+
+    bool success = terminalEngine->createVirtualEnvironment(pythonVersion);
+
+    runCommandBtn->setEnabled(true);
+    stopCommandBtn->setEnabled(false);
+    QApplication::restoreOverrideCursor();
+
+    if (success)
+    {
+        appendTerminalOutput("", false);
+        appendTerminalOutput("=== Virtual Environment Ready ===", false);
+        appendTerminalOutput("You can now run Python commands, pip, and pip-tools", false);
+        statusBar->showMessage(tr("Virtual environment created successfully"), 5000);
+    }
+    else
+    {
+        appendTerminalOutput("", false);
+        appendTerminalOutput("=== Virtual Environment Creation Failed ===", true);
+        statusBar->showMessage(tr("Failed to create virtual environment"), 5000);
+    }
+}
+
+/****************************************************************
+ * @brief on Run Command.
+ ***************************************************************/
+void MainWindow::onRunCommand()
+{
+    QString command = commandInput->text().trimmed();
+    if (command.isEmpty())
+    {
+        return;
+    }
+
+    // Clear input
+    commandInput->clear();
+
+    // Execute command
+    terminalEngine->executeCommand(command);
+}
+
+/****************************************************************
+ * @brief on Clear Terminal.
+ ***************************************************************/
+void MainWindow::onClearTerminal()
+{
+    terminalOutput->clear();
+}
+
+/****************************************************************
+ * @brief on Stop Command.
+ ***************************************************************/
+void MainWindow::onStopCommand()
+{
+    terminalEngine->stopCurrentProcess();
+}
+
+/****************************************************************
+ * @brief Handles terminal output from TerminalEngine.
+ ***************************************************************/
+void MainWindow::onTerminalOutput(const QString &output, bool isError)
+{
+    appendTerminalOutput(output, isError);
+}
+
+/****************************************************************
+ * @brief Handles terminal command started event.
+ ***************************************************************/
+void MainWindow::onTerminalCommandStarted(const QString &command)
+{
+    runCommandBtn->setEnabled(false);
+    stopCommandBtn->setEnabled(true);
+    statusBar->showMessage(QString("Executing: %1").arg(command));
+}
+
+/****************************************************************
+ * @brief Handles terminal command finished event.
+ ***************************************************************/
+void MainWindow::onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    runCommandBtn->setEnabled(true);
+    stopCommandBtn->setEnabled(false);
+
+    if (exitStatus == QProcess::NormalExit && exitCode == 0)
+    {
+        statusBar->showMessage(tr("Command completed successfully"), 3000);
+    }
+    else
+    {
+        statusBar->showMessage(tr("Command failed"), 3000);
+    }
+}
+
+/****************************************************************
+ * @brief Handles venv progress messages.
+ ***************************************************************/
+void MainWindow::onVenvProgress(const QString &message)
+{
+    appendTerminalOutput(message, false);
+    QApplication::processEvents(); // Update UI
+}
+
+/****************************************************************
+ * @brief Helper to append text to terminal output with color.
+ ***************************************************************/
+void MainWindow::appendTerminalOutput(const QString &text, bool isError)
+{
+    if (text.isEmpty())
+    {
+        terminalOutput->appendPlainText("");
+        return;
+    }
+
+    QTextCursor cursor = terminalOutput->textCursor();
+    cursor.movePosition(QTextCursor::End);
+
+    QTextCharFormat format;
+    if (isError)
+    {
+        format.setForeground(QColor(Qt::red));
+    }
+    else if (text.startsWith("===") || text.startsWith("$"))
+    {
+        format.setForeground(QColor(Qt::blue));
+        format.setFontWeight(QFont::Bold);
+    }
+    else
+    {
+        format.setForeground(QColor(Qt::black));
+    }
+
+    cursor.setCharFormat(format);
+    cursor.insertText(text + "\n");
+
+    terminalOutput->setTextCursor(cursor);
+    terminalOutput->ensureCursorVisible();
 }
 
 /************** End of MainWindow.cpp ***************************/
