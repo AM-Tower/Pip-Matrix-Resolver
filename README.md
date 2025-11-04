@@ -16,8 +16,17 @@ Features
 
 ## Build Instructions
 ```
-cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
-cmake --build build
+mkdir build
+ cd build
+ cmake ..
+ cmake --build .
+ # cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
+```
+
+### Create the installer/package:
+
+```
+cpack
 ```
 
 ## On Windows, windeployqt is run automatically after build.
@@ -46,10 +55,6 @@ Qt/
 │   ├── MainWindow.cpp
 │   ├── MainWindow.h
 │   ├── MainWindow.ui
-│   ├── MatrixHistory.cpp
-│   ├── MatrixHistory.h
-│   ├── MatrixUtility.cpp
-│   ├── MatrixUtility.h
 │   ├── PipToolsRunner.cpp
 │   ├── PipToolsRunner.h
 │   ├── ResolverEngine.cpp
@@ -64,11 +69,6 @@ Qt/
 │   ├── MainWindow.h.txt
 │   ├── MainWindow.ui.autosave.txt
 │   ├── MainWindow.ui.txt
-│   ├── MatrixHistory.cpp.txt
-│   ├── MatrixHistory.h.txt
-│   ├── MatrixHistory.ui.txt
-│   ├── MatrixUtility.cpp.txt
-│   ├── MatrixUtility.h.txt
 │   ├── PipMatrixResolverQt.qrc.txt
 │   ├── PipToolsRunner.cpp.txt
 │   ├── PipToolsRunner.h.txt
@@ -85,27 +85,17 @@ Qt/
 │   ├── test_mainwindow.cpp
 │   └── test_resolver.cpp
 ├── translations
-│   ├── MatrixHistory_en.qm
-│   ├── MatrixHistory_en.ts
-│   ├── MatrixHistory_es.qm
-│   ├── MatrixHistory_es.ts
-│   ├── MatrixUtility_en.qm
-│   ├── MatrixUtility_en.ts
-│   ├── MatrixUtility_es.qm
-│   ├── MatrixUtility_es.ts
 │   ├── PipMatrixResolverQt_en.qm
 │   ├── PipMatrixResolverQt_en.ts
 │   ├── PipMatrixResolverQt_es.qm
 │   └── PipMatrixResolverQt_es.ts
 ├── .gitignore
 ├── CMakeLists.txt
-├── CMakeLists.txt.user
 ├── LICENSE
 ├── PipMatrixResolverQt.qrc
 ├── README.md
 ├── cleanbash.sh
 ├── requirements.txt
-├── source_files.txt
 ├── src2txt.bat
 └── src2txt.sh
 ```

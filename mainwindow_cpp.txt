@@ -49,7 +49,7 @@ MainWindow::MainWindow(QWidget *parent)
     maxHistoryItems(10)
 {
     setupUi();
-
+    
     loadAppSettings();
     loadHistory();
 
@@ -92,12 +92,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
 
     connect(mainTabs, &QTabWidget::currentChanged, this, [this](int index)
-            {
-                if (mainTabs->widget(index)->objectName() == "tabPackageManager")
-                {
-                    refreshInstalledPackages();
-                }
-            });
+    {
+        if (mainTabs->widget(index)->objectName() == "tabPackageManager")
+        {
+            refreshInstalledPackages();
+        }
+    });
     connect(installedPackagesList, &QListWidget::doubleClicked, this, &MainWindow::onInstalledPackagesListDoubleClicked);
 
     // Refresh tables on startup
@@ -261,16 +261,6 @@ void MainWindow::setupUi()
 
     mainTabs->addTab(tabPackageManager, tr("Package Manager"));
 
-    // === TAB: COMMANDS ===
-    tabCommands = new QWidget();
-    tabCommands->setObjectName("tabCommands");
-    QVBoxLayout *commandsLayout = new QVBoxLayout(tabCommands);
-
-    commandsTab = new CommandsTab(tabCommands);
-    commandsLayout->addWidget(commandsTab);
-
-    mainTabs->addTab(tabCommands, tr("Commands"));
-
     // === TAB: SETTINGS ===
     tabSettings = new QWidget();
     tabSettings->setObjectName("tabSettings");
@@ -327,7 +317,7 @@ void MainWindow::setupUi()
     buttonBoxPreferences = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Apply | QDialogButtonBox::Cancel,
         tabSettings
-        );
+    );
     settingsLayout->addWidget(buttonBoxPreferences);
 
     mainTabs->addTab(tabSettings, tr("Settings"));
@@ -450,7 +440,7 @@ void MainWindow::fetchRequirementsFromUrl()
         QLineEdit::Normal,
         "",
         &ok
-        );
+    );
     if (!ok || inputUrl.isEmpty())
     {
         return;
@@ -484,7 +474,7 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
             this,
             tr("Invalid requirements.txt"),
             tr("Validation failed:\n%1").arg(errors.join("\n"))
-            );
+        );
         return;
     }
     if (requirementsModel)
@@ -550,8 +540,8 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     refreshRecentMenus();
     saveHistory();
     appendLog(tr("Fetched %1 requirements from URL: %2")
-                  .arg(requirementsModel->rowCount())
-                  .arg(url));
+        .arg(requirementsModel->rowCount())
+        .arg(url));
 }
 
 /****************************************************************
@@ -606,20 +596,20 @@ void MainWindow::refreshRecentMenus()
         const QString &path = historyRecentLocal.at(i);
         QAction *act = recentLocalMenu->addAction(path);
         connect(act, &QAction::triggered, this, [this, path]()
-                {
-                    loadRequirementsFromFile(path);
-                });
+        {
+            loadRequirementsFromFile(path);
+        });
     }
     if (!historyRecentLocal.isEmpty())
     {
         recentLocalMenu->addSeparator();
         QAction *clearLocal = recentLocalMenu->addAction(tr("Clear Local History"));
         connect(clearLocal, &QAction::triggered, this, [this]()
-                {
-                    historyRecentLocal.clear();
-                    refreshRecentMenus();
-                    saveHistory();
-                });
+        {
+            historyRecentLocal.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
     }
 
     // Populate Recent Web
@@ -628,20 +618,20 @@ void MainWindow::refreshRecentMenus()
         const QString &url = historyRecentWeb.at(i);
         QAction *act = recentWebMenu->addAction(url);
         connect(act, &QAction::triggered, this, [this, url]()
-                {
-                    loadRequirementsFromUrl(url);
-                });
+        {
+            loadRequirementsFromUrl(url);
+        });
     }
     if (!historyRecentWeb.isEmpty())
     {
         recentWebMenu->addSeparator();
         QAction *clearWeb = recentWebMenu->addAction(tr("Clear Web History"));
         connect(clearWeb, &QAction::triggered, this, [this]()
-                {
-                    historyRecentWeb.clear();
-                    refreshRecentMenus();
-                    saveHistory();
-                });
+        {
+            historyRecentWeb.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
     }
 }
 
@@ -805,12 +795,12 @@ void MainWindow::showCompiledResult(const QString &path)
 void MainWindow::showAboutBox()
 {
     QMessageBox::about(this,
-                       tr("About Pip Matrix Resolver"),
-                       tr("<b>Pip Matrix Resolver</b><br>"
-                          "Cross-platform Qt tool to resolve "
-                          "Python dependency matrices.<br>"
-                          "Version %1").arg(appVersion)
-                       );
+        tr("About Pip Matrix Resolver"),
+        tr("<b>Pip Matrix Resolver</b><br>"
+           "Cross-platform Qt tool to resolve "
+           "Python dependency matrices.<br>"
+           "Version %1").arg(appVersion)
+        );
 }
 
 /****************************************************************
@@ -1627,7 +1617,7 @@ void MainWindow::onUninstallPackage()
 }
 
 /****************************************************************
- * @brief Refreshes the list of installed packages in venv.
+ * @brief Refresh Installed Packages.
  ***************************************************************/
 void MainWindow::refreshInstalledPackages()
 {
@@ -1641,24 +1631,4 @@ void MainWindow::refreshInstalledPackages()
 #endif
     QStringList args = {"-m", "pip", "list", "--format=freeze"};
     process.start(venvPython, args);
-    process.waitForFinished();
-    QString output = process.readAllStandardOutput();
-    QStringList lines = output.split('\n', Qt::SkipEmptyParts);
-    for (int i = 0; i < lines.size(); ++i)
-    {
-        installedPackagesList->addItem(lines.at(i));
-    }
-}
-
-/****************************************************************
- * @brief Handles double-click on installed package list item.
- * @param index The model index of the double-clicked item.
- ***************************************************************/
-void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
-{
-    QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
-    packageNameInput->setText(pkg);
-    onUninstallPackage();
-}
-
-/************** End of MainWindow.cpp ***************************/
+    process.waitForFinishe

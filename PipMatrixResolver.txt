@@ -1,6 +1,6 @@
 #===============================================================================
 # Project: PipMatrixResolver
-# Generated on: 2025-11-02 19:37:28
+# Generated on: 2025-11-03 20:08:23
 # OS: WSL on Ubuntu: 24.04
 # This file is used to show full source code, cmake, read me, and file locates.
 #================================C
@@ -16,44 +16,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets LinguistTools Network Concurrent Svg)
-
 qt_standard_project_setup()
 
-# --------------------------------------------------
 # Translations
-# --------------------------------------------------
 set(TS_FILES
     translations/PipMatrixResolverQt_en.ts
     translations/PipMatrixResolverQt_es.ts
 )
-
 qt_add_translation(QM_FILES ${TS_FILES})
 
-# --------------------------------------------------
 # Resources (icons + translations)
-# --------------------------------------------------
 qt_add_resources(APP_RESOURCES PipMatrixResolverQt.qrc)
 
-# --------------------------------------------------
 # Executable
-# --------------------------------------------------
 qt_add_executable(PipMatrixResolverQt
     src/main.cpp
-    src/MainWindow.cpp
-    src/MainWindow.h
-    src/MainWindow.ui
-    src/ResolverEngine.cpp
-    src/ResolverEngine.h
-    src/VenvManager.cpp
-    src/VenvManager.h
-    src/PipToolsRunner.cpp
-    src/PipToolsRunner.h
-    src/BatchRunner.cpp
-    src/BatchRunner.h
-
+    src/MainWindow.cpp src/MainWindow.h src/MainWindow.ui
+    src/CommandsTab.cpp src/CommandsTab.h
     ${APP_RESOURCES}
     ${QM_FILES}
-    src/venv_manager.py   # ensures .qm files are built before linking
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
@@ -64,13 +45,25 @@ target_link_libraries(PipMatrixResolverQt PRIVATE
     Qt6::Concurrent
     Qt6::Svg
 )
-
 target_include_directories(PipMatrixResolverQt PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-# --------------------------------------------------
+
+# Install the executable
+install(TARGETS PipMatrixResolverQt DESTINATION bin)
+
+# Install Python scripts and requirements files
+install(FILES
+    src/venv_manager.py
+    src/requirements.in
+    src/requirements.txt
+    DESTINATION share/pipmatrixresolverqt/python
+)
+
+# Optionally, show a message after install
+install(CODE "message(\"\nPython scripts installed to: \${CMAKE_INSTALL_PREFIX}/share/pipmatrixresolverqt/python\nPlease ensure you have Python 3 and pip installed on your system.\")")
+
 # Deployment logic
-# --------------------------------------------------
 if(WIN32)
     find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${Qt6_DIR}/../../../bin" ENV PATH)
     if(WINDEPLOYQT_EXECUTABLE)
@@ -91,7 +84,31 @@ elseif(UNIX)
     message(STATUS "✅ Linux build — Qt runtime deployment handled by system packages.")
 endif()
 
-install(TARGETS PipMatrixResolverQt)
+# Packaging with CPack (Qt Installer, NSIS, DEB/RPM)
+include(InstallRequiredSystemLibraries)
+set(CPACK_PACKAGE_NAME "PipMatrixResolverQt")
+set(CPACK_PACKAGE_VENDOR "AM-Tower")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Python venv and pip-tools GUI manager")
+set(CPACK_PACKAGE_VERSION_MAJOR "0")
+set(CPACK_PACKAGE_VERSION_MINOR "1")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_PACKAGE_EXECUTABLES "PipMatrixResolverQt" "PipMatrixResolverQt")
+
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "PipMatrixResolverQt")
+    set(CPACK_NSIS_PACKAGE_NAME "PipMatrixResolverQt")
+    set(CPACK_NSIS_CONTACT "Occupant.AM.Tower@gmail.com")
+elseif(APPLE)
+    set(CPACK_GENERATOR "DragNDrop")
+else()
+    set(CPACK_GENERATOR "DEB;RPM")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Jeffrey Scott Flesher")
+endif()
+
+include(CPack)
 
 #-------------------------------------------------------------------------------
 # File: PipMatrixResolverQt.qrc
@@ -145,8 +162,17 @@ Features
 
 ## Build Instructions
 ```
-cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
-cmake --build build
+mkdir build
+ cd build
+ cmake ..
+ cmake --build .
+ # cmake -S . -B build -DCMAKE\_PREFIX\_PATH="C:/Qt/6.10.0/mingw\_64"
+```
+
+### Create the installer/package:
+
+```
+cpack
 ```
 
 ## On Windows, windeployqt is run automatically after build.
@@ -175,10 +201,6 @@ Qt/
 │   ├── MainWindow.cpp
 │   ├── MainWindow.h
 │   ├── MainWindow.ui
-│   ├── MatrixHistory.cpp
-│   ├── MatrixHistory.h
-│   ├── MatrixUtility.cpp
-│   ├── MatrixUtility.h
 │   ├── PipToolsRunner.cpp
 │   ├── PipToolsRunner.h
 │   ├── ResolverEngine.cpp
@@ -193,11 +215,6 @@ Qt/
 │   ├── MainWindow.h.txt
 │   ├── MainWindow.ui.autosave.txt
 │   ├── MainWindow.ui.txt
-│   ├── MatrixHistory.cpp.txt
-│   ├── MatrixHistory.h.txt
-│   ├── MatrixHistory.ui.txt
-│   ├── MatrixUtility.cpp.txt
-│   ├── MatrixUtility.h.txt
 │   ├── PipMatrixResolverQt.qrc.txt
 │   ├── PipToolsRunner.cpp.txt
 │   ├── PipToolsRunner.h.txt
@@ -214,27 +231,17 @@ Qt/
 │   ├── test_mainwindow.cpp
 │   └── test_resolver.cpp
 ├── translations
-│   ├── MatrixHistory_en.qm
-│   ├── MatrixHistory_en.ts
-│   ├── MatrixHistory_es.qm
-│   ├── MatrixHistory_es.ts
-│   ├── MatrixUtility_en.qm
-│   ├── MatrixUtility_en.ts
-│   ├── MatrixUtility_es.qm
-│   ├── MatrixUtility_es.ts
 │   ├── PipMatrixResolverQt_en.qm
 │   ├── PipMatrixResolverQt_en.ts
 │   ├── PipMatrixResolverQt_es.qm
 │   └── PipMatrixResolverQt_es.ts
 ├── .gitignore
 ├── CMakeLists.txt
-├── CMakeLists.txt.user
 ├── LICENSE
 ├── PipMatrixResolverQt.qrc
 ├── README.md
 ├── cleanbash.sh
 ├── requirements.txt
-├── source_files.txt
 ├── src2txt.bat
 └── src2txt.sh
 ```
@@ -336,167 +343,677 @@ Help → About – Show app info
     Unlicensed, MIT or your chosen license
 
 #-------------------------------------------------------------------------------
-# File: src/BatchRunner.cpp
+# File: src/CommandsTab.cpp
 #-------------------------------------------------------------------------------
-#include "BatchRunner.h"
-#include <QRegularExpression>
+/****************************************************************
+ * @file CommandsTab.cpp
+ * @brief Implements the CommandsTab class for dynamic command UI,
+ *        batch execution, project editing, and JSON persistence.
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.7
+ * @date    2025-11-03
+ * @section License MIT
+ * @section DESCRIPTION
+ * This file contains the implementation of CommandsTab widget.
+ ***************************************************************/
+#include "CommandsTab.h"
 #include <QFileInfo>
+#include <QMessageBox>
+#include <QInputDialog>
+#include <QHBoxLayout>
+#include <QFormLayout>
+#include <QDialogButtonBox>
+#include <QScrollArea>
+#include <QTextStream>
 
-BatchRunner::BatchRunner(QObject *parent) : QObject(parent), m_running(false)
+/****************************************************************
+ * @brief Constructor: Builds the UI and loads initial state.
+ ***************************************************************/
+CommandsTab::CommandsTab(QWidget *parent) : QWidget(parent)
 {
-    connect(&m_process, &QProcess::readyReadStandardError, this, &BatchRunner::handleReadyRead);
-    connect(&m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &BatchRunner::handleFinished);
+    buildUI();
+    loadProjects("projects.json");
 }
 
-void BatchRunner::enqueue(const BatchJob &job)
+/****************************************************************
+ * @brief Builds the static UI components.
+ ***************************************************************/
+void CommandsTab::buildUI()
 {
-    m_jobs.enqueue(job);
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+
+    // Project selector and management buttons
+    QHBoxLayout *projLayout = new QHBoxLayout;
+    projectDropdown = new QComboBox;
+    connect(projectDropdown, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &CommandsTab::onProjectChanged);
+    addProjectButton = new QPushButton("Add");
+    editProjectButton = new QPushButton("Edit");
+    deleteProjectButton = new QPushButton("Delete");
+    connect(addProjectButton, &QPushButton::clicked, this, &CommandsTab::onAddProject);
+    connect(editProjectButton, &QPushButton::clicked, this, &CommandsTab::onEditProject);
+    connect(deleteProjectButton, &QPushButton::clicked, this, &CommandsTab::onDeleteProject);
+    projLayout->addWidget(new QLabel("Project:"));
+    projLayout->addWidget(projectDropdown);
+    projLayout->addWidget(addProjectButton);
+    projLayout->addWidget(editProjectButton);
+    projLayout->addWidget(deleteProjectButton);
+    mainLayout->addLayout(projLayout);
+
+    // Dynamic inputs area
+    inputsLayout = new QVBoxLayout;
+    mainLayout->addLayout(inputsLayout);
+
+    // Extra arguments
+    extraArgsEdit = new QLineEdit;
+    connect(extraArgsEdit, &QLineEdit::textChanged, this, &CommandsTab::updatePreview);
+    mainLayout->addWidget(new QLabel("Extra Arguments:"));
+    mainLayout->addWidget(extraArgsEdit);
+
+    // Command preview + clear button
+    QHBoxLayout *previewLayout = new QHBoxLayout;
+    commandPreview = new QLineEdit;
+    commandPreview->setReadOnly(true);
+    clearButton = new QToolButton;
+    clearButton->setText("X");
+    connect(clearButton, &QToolButton::clicked, this, &CommandsTab::onClearCommand);
+    previewLayout->addWidget(commandPreview);
+    previewLayout->addWidget(clearButton);
+    mainLayout->addLayout(previewLayout);
+
+    // Batch file selector
+    QHBoxLayout *batchLayout = new QHBoxLayout;
+    batchFileEdit = new QLineEdit;
+    batchFileEdit->setPlaceholderText("Batch file (one path per line)");
+    QPushButton *browseBatchBtn = new QPushButton("Browse");
+    connect(browseBatchBtn, &QPushButton::clicked, this, &CommandsTab::onBrowseBatchFile);
+    batchLayout->addWidget(batchFileEdit);
+    batchLayout->addWidget(browseBatchBtn);
+    mainLayout->addLayout(batchLayout);
+
+    // Output console
+    outputConsole = new QTextEdit;
+    outputConsole->setReadOnly(true);
+    mainLayout->addWidget(new QLabel("Command Output:"));
+    mainLayout->addWidget(outputConsole);
+
+    // Run buttons
+    QHBoxLayout *runLayout = new QHBoxLayout;
+    runButton = new QPushButton("Run Command");
+    runBatchButton = new QPushButton("Run Batch");
+    connect(runButton, &QPushButton::clicked, this, &CommandsTab::onRunCommand);
+    connect(runBatchButton, &QPushButton::clicked, this, &CommandsTab::onRunBatch);
+    runLayout->addWidget(runButton);
+    runLayout->addWidget(runBatchButton);
+    mainLayout->addLayout(runLayout);
 }
 
-void BatchRunner::start()
+/****************************************************************
+ * @brief Loads projects from a JSON file.
+ ***************************************************************/
+bool CommandsTab::loadProjects(const QString &jsonPath)
 {
-    if (m_running || m_jobs.isEmpty())
+    QFile file(jsonPath);
+    if (!file.open(QIODevice::ReadOnly))
     {
-        return;
+        return false;
     }
-    m_running = true;
-    runNextJob();
-}
 
-void BatchRunner::stop()
-{
-    if (m_running)
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    QJsonArray projArray = doc["projects"].toArray();
+
+    projects.clear();
+    projectDropdown->clear();
+
+    for (int i = 0; i < projArray.size(); ++i)
     {
-        m_process.kill();
-        m_jobs.clear();
-        m_running = false;
-    }
-}
+        QJsonObject obj = projArray.at(i).toObject();
+        ProjectDef proj;
+        proj.name = obj["name"].toString();
+        proj.scriptPath = obj["script"].toString();
+        proj.extraArgs = obj["extra_args"].toString();
 
-void BatchRunner::runNextJob()
-{
-    if (m_jobs.isEmpty())
-    {
-        m_running = false;
-        emit allJobsFinished();
-        return;
-    }
-
-    m_currentJob = m_jobs.dequeue();
-    emit logMessage(QString("Starting batch job: %1 + %2 → %3")
-                    .arg(m_currentJob.imagePath, m_currentJob.audioPath, m_currentJob.outputPath));
-
-    QStringList args = {
-        "-y",
-        "-i", m_currentJob.audioPath,
-        "-i", m_currentJob.imagePath,
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-shortest",
-        m_currentJob.outputPath
-    };
-
-    m_process.setProgram("ffmpeg");
-    m_process.setArguments(args);
-    m_process.start();
-}
-
-void BatchRunner::handleReadyRead()
-{
-    const QString output = QString::fromUtf8(m_process.readAllStandardError());
-    emit logMessage(output);
-
-    // Parse ffmpeg progress lines like: "frame=  100 fps=25 q=28.0 size=..."
-    const QStringList lines = output.split('\n');
-    for (const QString &line : lines)
-    {
-        int percent = parseProgress(line);
-        if (percent >= 0)
+        QJsonArray inputsArr = obj["inputs"].toArray();
+        for (int j = 0; j < inputsArr.size(); ++j)
         {
-            emit progressChanged(percent);
+            QJsonObject inObj = inputsArr.at(j).toObject();
+            proj.inputs.append({inObj["label"].toString(), inObj["switch"].toString()});
+        }
+
+        projects.append(proj);
+        projectDropdown->addItem(proj.name);
+    }
+    if (!projects.isEmpty())
+    {
+        onProjectChanged(0);
+    }
+    return true;
+}
+
+/****************************************************************
+ * @brief Saves projects to a JSON file.
+ ***************************************************************/
+bool CommandsTab::saveProjects(const QString &jsonPath)
+{
+    QJsonArray arr;
+    for (int i = 0; i < projects.size(); ++i)
+    {
+        const ProjectDef &proj = projects.at(i);
+        QJsonObject obj;
+        obj["name"] = proj.name;
+        obj["script"] = proj.scriptPath;
+        obj["extra_args"] = proj.extraArgs;
+        QJsonArray inputsArr;
+        for (int j = 0; j < proj.inputs.size(); ++j)
+        {
+            const InputDef &input = proj.inputs.at(j);
+            QJsonObject inObj;
+            inObj["label"] = input.label;
+            inObj["switch"] = input.switchName;
+            inputsArr.append(inObj);
+        }
+        obj["inputs"] = inputsArr;
+        arr.append(obj);
+    }
+    QJsonObject root;
+    root["projects"] = arr;
+    QFile file(jsonPath);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        return false;
+    }
+    file.write(QJsonDocument(root).toJson());
+    return true;
+}
+
+/****************************************************************
+ * @brief Handles project selection change.
+ ***************************************************************/
+void CommandsTab::onProjectChanged(int index)
+{
+    if (index < 0 || index >= projects.size())
+    {
+        return;
+    }
+    rebuildInputs(projects.at(index));
+    extraArgsEdit->setText(projects.at(index).extraArgs);
+    updatePreview();
+}
+
+/****************************************************************
+ * @brief Rebuilds input fields dynamically.
+ ***************************************************************/
+void CommandsTab::rebuildInputs(const ProjectDef &proj)
+{
+    QLayoutItem *child;
+    while ((child = inputsLayout->takeAt(0)) != nullptr)
+    {
+        delete child->widget();
+        delete child;
+    }
+    inputEdits.clear();
+
+    for (int i = 0; i < proj.inputs.size(); ++i)
+    {
+        const InputDef &input = proj.inputs.at(i);
+        auto lbl = new QLabel(input.label);
+        auto edit = new QLineEdit;
+        connect(edit, &QLineEdit::textChanged, this, &CommandsTab::updatePreview);
+        inputsLayout->addWidget(lbl);
+        inputsLayout->addWidget(edit);
+        inputEdits.append(edit);
+    }
+}
+
+/****************************************************************
+ * @brief Builds the full command string.
+ ***************************************************************/
+QString CommandsTab::buildCommand() const
+{
+    int index = projectDropdown->currentIndex();
+    if (index < 0 || index >= projects.size())
+    {
+        return QString();
+    }
+
+    const ProjectDef &proj = projects.at(index);
+    QString cmd = QString("python \"%1\" ").arg(proj.scriptPath);
+
+    for (int i = 0; i < inputEdits.size(); ++i)
+    {
+        QString val = inputEdits.at(i)->text().trimmed();
+        if (!val.isEmpty())
+        {
+            cmd += QString("%1 \"%2\" ").arg(proj.inputs.at(i).switchName, val);
+        }
+    }
+
+    if (!extraArgsEdit->text().isEmpty())
+    {
+        cmd += extraArgsEdit->text();
+    }
+
+    return cmd.trimmed();
+}
+
+/****************************************************************
+ * @brief Validates script and input files exist.
+ ***************************************************************/
+bool CommandsTab::validateFiles(QString &errorMsg) const
+{
+    int index = projectDropdown->currentIndex();
+    if (index < 0 || index >= projects.size())
+    {
+        errorMsg = "Invalid project selected.";
+        return false;
+    }
+
+    QFileInfo scriptInfo(projects.at(index).scriptPath);
+    if (!scriptInfo.exists())
+    {
+        errorMsg = "Script file does not exist.";
+        return false;
+    }
+
+    for (int i = 0; i < inputEdits.size(); ++i)
+    {
+        if (!inputEdits.at(i)->text().isEmpty())
+        {
+            QFileInfo fi(inputEdits.at(i)->text());
+            if (!fi.exists())
+            {
+                errorMsg = QString("Input file missing: %1").arg(inputEdits.at(i)->text());
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/****************************************************************
+ * @brief Updates the command preview.
+ ***************************************************************/
+void CommandsTab::updatePreview()
+{
+    commandPreview->setText(buildCommand());
+}
+
+/****************************************************************
+ * @brief Runs the command using QProcess.
+ ***************************************************************/
+void CommandsTab::onRunCommand()
+{
+    QString errorMsg;
+    if (!validateFiles(errorMsg))
+    {
+        QMessageBox::critical(this, "Validation Error", errorMsg);
+        return;
+    }
+
+    QString cmd = buildCommand();
+    outputConsole->append(QString("Running: %1").arg(cmd));
+    executeCommand(cmd);
+}
+
+/****************************************************************
+ * @brief Runs batch commands from a file.
+ ***************************************************************/
+void CommandsTab::onRunBatch()
+{
+    QString batchFile = batchFileEdit->text();
+    QFile file(batchFile);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        QMessageBox::critical(this, "Error", "Cannot open batch file.");
+        return;
+    }
+
+    QTextStream in(&file);
+    int index = projectDropdown->currentIndex();
+    if (index < 0 || index >= projects.size())
+    {
+        QMessageBox::critical(this, "Error", "No project selected.");
+        return;
+    }
+    const ProjectDef &proj = projects.at(index);
+
+    while (!in.atEnd())
+    {
+        QString line = in.readLine().trimmed();
+        if (line.isEmpty()) continue;
+
+        QStringList batchInputs = line.split(' ', Qt::SkipEmptyParts);
+        for (int i = 0; i < inputEdits.size(); ++i)
+        {
+            if (i < batchInputs.size())
+            {
+                inputEdits.at(i)->setText(batchInputs.at(i));
+            }
+            else
+            {
+                inputEdits.at(i)->clear();
+            }
+        }
+        QString cmd = buildCommand();
+        outputConsole->append(QString("Batch Running: %1").arg(cmd));
+        executeCommand(cmd);
+    }
+}
+
+/****************************************************************
+ * @brief Executes a command and streams output.
+ ***************************************************************/
+void CommandsTab::executeCommand(const QString &cmd)
+{
+    QProcess *proc = new QProcess(this);
+    proc->setProcessChannelMode(QProcess::MergedChannels);
+    connect(proc, &QProcess::readyReadStandardOutput, [this, proc]()
+            {
+                outputConsole->append(proc->readAllStandardOutput());
+            });
+    connect(proc, &QProcess::readyReadStandardError, [this, proc]()
+            {
+                outputConsole->append(proc->readAllStandardError());
+            });
+    proc->start(cmd);
+}
+
+/****************************************************************
+ * @brief Clears the command preview.
+ ***************************************************************/
+void CommandsTab::onClearCommand()
+{
+    commandPreview->clear();
+}
+
+/****************************************************************
+ * @brief Opens a file dialog to select batch file.
+ ***************************************************************/
+void CommandsTab::onBrowseBatchFile()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, "Select Batch File", QString(), "Text Files (*.txt);;All Files (*)");
+    if (!fileName.isEmpty())
+    {
+        batchFileEdit->setText(fileName);
+    }
+}
+
+/****************************************************************
+ * @brief Shows the project editor dialog for add/edit.
+ ***************************************************************/
+bool CommandsTab::showProjectDialog(ProjectDef &proj, bool isEdit)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(isEdit ? "Edit Project" : "Add Project");
+    QFormLayout *form = new QFormLayout(&dialog);
+
+    QLineEdit *nameEdit = new QLineEdit(proj.name, &dialog);
+    QLineEdit *scriptEdit = new QLineEdit(proj.scriptPath, &dialog);
+    QLineEdit *extraArgsEditDlg = new QLineEdit(proj.extraArgs, &dialog);
+    QSpinBox *inputCountSpin = new QSpinBox(&dialog);
+    inputCountSpin->setRange(1, 10);
+    inputCountSpin->setValue(proj.inputs.isEmpty() ? 2 : proj.inputs.size());
+
+    QVector<QLineEdit*> labelEdits;
+    QVector<QLineEdit*> switchEdits;
+    QVBoxLayout *inputsVBox = new QVBoxLayout;
+    for (int i = 0; i < inputCountSpin->value(); ++i)
+    {
+        QHBoxLayout *row = new QHBoxLayout;
+        QLineEdit *lblEdit = new QLineEdit(i < proj.inputs.size() ? proj.inputs.at(i).label : QString("input%1").arg(i+1), &dialog);
+        QLineEdit *swEdit = new QLineEdit(i < proj.inputs.size() ? proj.inputs.at(i).switchName : "", &dialog);
+        row->addWidget(new QLabel("Label:"));
+        row->addWidget(lblEdit);
+        row->addWidget(new QLabel("Switch:"));
+        row->addWidget(swEdit);
+        inputsVBox->addLayout(row);
+        labelEdits.append(lblEdit);
+        switchEdits.append(swEdit);
+    }
+    connect(inputCountSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            [inputsVBox, &labelEdits, &switchEdits, &dialog](int count)
+            {
+                QLayoutItem *child;
+                while ((child = inputsVBox->takeAt(0)) != nullptr)
+                {
+                    delete child->widget();
+                    delete child;
+                }
+                labelEdits.clear();
+                switchEdits.clear();
+                for (int i = 0; i < count; ++i)
+                {
+                    QHBoxLayout *row = new QHBoxLayout;
+                    QLineEdit *lblEdit = new QLineEdit(QString("input%1").arg(i+1), &dialog);
+                    QLineEdit *swEdit = new QLineEdit("", &dialog);
+                    row->addWidget(new QLabel("Label:"));
+                    row->addWidget(lblEdit);
+                    row->addWidget(new QLabel("Switch:"));
+                    row->addWidget(swEdit);
+                    inputsVBox->addLayout(row);
+                    labelEdits.append(lblEdit);
+                    switchEdits.append(swEdit);
+                }
+            }
+            );
+
+    form->addRow("Project Name:", nameEdit);
+    form->addRow("Script Path:", scriptEdit);
+    form->addRow("Extra Args:", extraArgsEditDlg);
+    form->addRow("Number of Inputs:", inputCountSpin);
+    form->addRow("Inputs:", inputsVBox);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        proj.name = nameEdit->text();
+        proj.scriptPath = scriptEdit->text();
+        proj.extraArgs = extraArgsEditDlg->text();
+        proj.inputs.clear();
+        for (int i = 0; i < labelEdits.size(); ++i)
+        {
+            proj.inputs.append({labelEdits.at(i)->text(), switchEdits.at(i)->text()});
+        }
+        return true;
+    }
+    return false;
+}
+
+/****************************************************************
+ * @brief Adds a new project.
+ ***************************************************************/
+void CommandsTab::onAddProject()
+{
+    ProjectDef proj;
+    if (showProjectDialog(proj, false))
+    {
+        projects.append(proj);
+        saveProjects("projects.json");
+        refreshProjectDropdown();
+        projectDropdown->setCurrentIndex(projects.size() - 1);
+    }
+}
+
+/****************************************************************
+ * @brief Edits the selected project.
+ ***************************************************************/
+void CommandsTab::onEditProject()
+{
+    int index = projectDropdown->currentIndex();
+    if (index < 0 || index >= projects.size())
+    {
+        return;
+    }
+    ProjectDef proj = projects.at(index);
+    if (showProjectDialog(proj, true))
+    {
+        projects[index] = proj;
+        saveProjects("projects.json");
+        refreshProjectDropdown();
+        projectDropdown->setCurrentIndex(index);
+    }
+}
+
+/****************************************************************
+ * @brief Deletes the selected project.
+ ***************************************************************/
+void CommandsTab::onDeleteProject()
+{
+    int index = projectDropdown->currentIndex();
+    if (index < 0 || index >= projects.size())
+    {
+        return;
+    }
+    if (QMessageBox::question(this, "Delete Project", "Are you sure you want to delete this project?") == QMessageBox::Yes)
+    {
+        projects.remove(index);
+        saveProjects("projects.json");
+        refreshProjectDropdown();
+        if (!projects.isEmpty())
+        {
+            projectDropdown->setCurrentIndex(0);
         }
     }
 }
 
-void BatchRunner::handleFinished(int exitCode, QProcess::ExitStatus status)
+/****************************************************************
+ *es.
+ ***************************************************************/
+void CommandsTab::refreshProjectDropdown()
 {
-    if (status == QProcess::NormalExit && exitCode == 0)
+    projectDropdown->clear();
+    for (int i = 0; i < projects.size(); ++i)
     {
-        emit logMessage(QString("Job finished successfully: %1").arg(m_currentJob.outputPath));
-        emit jobFinished(m_currentJob.outputPath);
+        projectDropdown->addItem(projects.at(i).name);
     }
-    else
-    {
-        emit logMessage(QString("Job failed: %1").arg(m_currentJob.outputPath));
-    }
-
-    runNextJob();
 }
+/************** End of CommandsTab.cpp **************************/
 
-int BatchRunner::parseProgress(const QString &line)
-{
-    // Very basic parser: look for "time=" and estimate percent
-    QRegularExpression re("time=(\\d+):(\\d+):(\\d+\\.\\d+)");
-    QRegularExpressionMatch match = re.match(line);
-    if (match.hasMatch())
-    {
-        int hours = match.captured(1).toInt();
-        int minutes = match.captured(2).toInt();
-        double seconds = match.captured(3).toDouble();
-        double elapsed = hours * 3600 + minutes * 60 + seconds;
+#-------------------------------------------------------------------------------
+# File: src/CommandsTab.h
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file CommandsTab.h
+ * @brief Declares the CommandsTab class for dynamic command UI,
+ *        batch execution, project editing, and JSON persistence.
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.7
+ * @date    2025-11-03
+ * @section License MIT
+ * @section DESCRIPTION
+ * This file defines the CommandsTab widget for PipMatrixResolverQt.
+ * Features:
+ *   - Dynamic UI from JSON schema
+ *   - Batch command execution
+ *   - Project add/edit/delete dialogs
+ *   - JSON save/load
+ *   - Real-time output streaming
+ *   - Doxygen headers and C-style braces
+ ***************************************************************/
+#ifndef COMMANDSTAB_H
+#define COMMANDSTAB_H
 
-        // For demo: assume 60 seconds total
-        double percent = (elapsed / 60.0) * 100.0;
-        if (percent > 100.0) percent = 100.0;
-        return static_cast<int>(percent);
-    }
-    return -1;
-}
-#-------------------------------------------------------------------------------
-# File: src/BatchRunner.h
-#-------------------------------------------------------------------------------
-#pragma once
-#include <QObject>
-#include <QQueue>
+#include <QWidget>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QToolButton>
+#include <QTextEdit>
+#include <QVBoxLayout>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
 #include <QProcess>
+#include <QLabel>
+#include <QVector>
+#include <QDialog>
+#include <QSpinBox>
+#include <QFileDialog>
 
-struct BatchJob
+/****************************************************************
+ * @struct InputDef
+ * @brief Defines a single input argument for a command.
+ ***************************************************************/
+struct InputDef
 {
-    QString imagePath;
-    QString audioPath;
-    QString outputPath;
+    QString label;
+    QString switchName;
 };
 
-class BatchRunner : public QObject
+/****************************************************************
+ * @struct ProjectDef
+ * @brief Defines a project with script, inputs, and extra args.
+ ***************************************************************/
+struct ProjectDef
+{
+    QString name;
+    QString scriptPath;
+    QVector<InputDef> inputs;
+    QString extraArgs;
+};
+
+/****************************************************************
+ * @class CommandsTab
+ * @brief Implements the dynamic command management tab.
+ ***************************************************************/
+class CommandsTab : public QWidget
 {
     Q_OBJECT
+
 public:
-    explicit BatchRunner(QObject *parent = nullptr);
-
-    void enqueue(const BatchJob &job);
-    void start();
-    void stop();
-
-signals:
-    void logMessage(const QString &line);
-    void progressChanged(int percent);
-    void jobFinished(const QString &outputPath);
-    void allJobsFinished();
+    explicit CommandsTab(QWidget *parent = nullptr);
+    bool loadProjects(const QString &jsonPath);
+    bool saveProjects(const QString &jsonPath);
 
 private slots:
-    void handleReadyRead();
-    void handleFinished(int exitCode, QProcess::ExitStatus status);
+    void onProjectChanged(int index);
+    void onRunCommand();
+    void onRunBatch();
+    void onClearCommand();
+    void onAddProject();
+    void onEditProject();
+    void onDeleteProject();
+    void updatePreview();
+    void onBrowseBatchFile();
 
 private:
-    void runNextJob();
-    int parseProgress(const QString &line);
+    QVector<ProjectDef> projects;
 
-    QQueue<BatchJob> m_jobs;
-    QProcess m_process;
-    BatchJob m_currentJob;
-    bool m_running;
+    QComboBox *projectDropdown;
+    QVBoxLayout *inputsLayout;
+    QVector<QLineEdit *> inputEdits;
+    QLineEdit *extraArgsEdit;
+    QLineEdit *commandPreview;
+    QTextEdit *outputConsole;
+    QLineEdit *batchFileEdit;
+    QPushButton *runButton;
+    QPushButton *runBatchButton;
+    QPushButton *addProjectButton;
+    QPushButton *editProjectButton;
+    QPushButton *deleteProjectButton;
+    QToolButton *clearButton;
+
+    void buildUI();
+    void rebuildInputs(const ProjectDef &proj);
+    QString buildCommand() const;
+    bool validateFiles(QString &errorMsg) const;
+    void executeCommand(const QString &cmd);
+
+    // Project editor dialog helpers
+    bool showProjectDialog(ProjectDef &proj, bool isEdit = false);
+    void refreshProjectDropdown();
 };
+
+#endif // COMMANDSTAB_H
+/************** End of CommandsTab.h ***************************/
+
 #-------------------------------------------------------------------------------
 # File: src/MainWindow.cpp
 #-------------------------------------------------------------------------------
@@ -504,7 +1021,7 @@ private:
  * @file MainWindow.cpp
  * @brief Implements the main application window.
  *
- * @author Jeffrey Scott Flesher
+ * @author Jeffrey Scott Flesher with Copilot
  * @version 0.6
  * @date    2025-11-01
  * @section License Unlicensed, MIT, or any.
@@ -529,11 +1046,13 @@ private:
 #include <QPlainTextEdit>
 #include <QLineEdit>
 #include <QDir>
+#include <QString>
+#include <QDebug>
 
 /****************************************************************
  * @brief Globals for MainWindow.
  ***************************************************************/
-QString MainWindow::appVersion = "1.0";
+QString MainWindow::appVersion = "1.0"; // Change in main
 const QString DEFAULT_PYTHON_VERSION = "3.11";
 const QString DEFAULT_PIP_VERSION = "23.2";
 const QString DEFAULT_PIPTOOLS_VERSION = "6.13";
@@ -1747,7 +2266,8 @@ bool MainWindow::detectNvidiaGpu()
 void MainWindow::onRunCommand()
 {
     QString command = ui->commandInput->text().trimmed();
-    if (command.isEmpty()) {
+    if (command.isEmpty())
+    {
         ui->terminalOutput->appendPlainText("No command entered.");
         return;
     }
@@ -1763,28 +2283,37 @@ void MainWindow::onRunCommand()
     QStringList args;
     bool usedVenv = false;
 
-    if (command.startsWith("pip ")) {
+    if (command.startsWith("pip "))
+    {
         args << "-m" << "pip";
         args << command.mid(4).split(' ');
         process.start(venvPython, args);
         usedVenv = true;
-    } else if (command.startsWith("pip-compile")) {
+    }
+    else if (command.startsWith("pip-compile"))
+    {
         args << "-m" << "piptools" << "compile";
         QString rest = command.mid(QString("pip-compile").length()).trimmed();
         if (!rest.isEmpty()) args << rest.split(' ');
         process.start(venvPython, args);
         usedVenv = true;
-    } else if (command.startsWith("pip-sync")) {
+    }
+    else if (command.startsWith("pip-sync"))
+    {
         args << "-m" << "piptools" << "sync";
         QString rest = command.mid(QString("pip-sync").length()).trimmed();
         if (!rest.isEmpty()) args << rest.split(' ');
         process.start(venvPython, args);
         usedVenv = true;
-    } else if (command.startsWith("python ")) {
+    }
+    else if (command.startsWith("python "))
+    {
         args = command.mid(7).split(' ');
         process.start(venvPython, args);
         usedVenv = true;
-    } else {
+    }
+    else
+    {
 #if defined(Q_OS_WIN)
         process.start("cmd.exe", QStringList() << "/C" << command);
 #else
@@ -1932,9 +2461,25 @@ void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
 }
 
 /****************************************************************
- * @brief .
+ * @brief Example function to run a Python script.
+ * runPythonScript("C:/path/to/MuseTalk/main.py");
  ***************************************************************/
+void runPythonScript(const QString &scriptPath)
+{
+    QProcess process;
+    QString pythonExe = "python"; // or full path to python.exe in your venv
+    QStringList arguments;
+    arguments << scriptPath;
 
+    process.start(pythonExe, arguments);
+    process.waitForFinished();
+
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+
+    qDebug() << "Output:" << output;
+    qDebug() << "Error:" << error;
+}
 /****************************************************************
  * @brief .
  ***************************************************************/
@@ -2713,366 +3258,6 @@ private:
 </ui>
 
 #-------------------------------------------------------------------------------
-# File: src/PipToolsRunner.cpp
-#-------------------------------------------------------------------------------
-#include "PipToolsRunner.h"
-#include <QProcess>
-#include <QFile>
-#include <QThread>
-
-PipToolsRunner::PipToolsRunner(const QString &python, QObject *parent) : QObject(parent), m_python(python)
-{
-}
-
-bool PipToolsRunner::runOnce(const QString &inFile, const QString &outFile)
-{
-    QProcess p;
-    p.setProgram("pip-compile");
-    p.setArguments({
-        "--resolver=backtracking",
-        "--prefer-binary",
-        "--upgrade",
-        "--output-file", outFile,
-        inFile
-    });
-
-    connect(&p, &QProcess::readyReadStandardOutput, [&]()
-    {
-        emit logMessage(QString::fromUtf8(p.readAllStandardOutput()));
-    });
-    connect(&p, &QProcess::readyReadStandardError, [&]()
-    {
-        emit logMessage(QString::fromUtf8(p.readAllStandardError()));
-    });
-
-    p.start();
-    if (!p.waitForStarted())
-    {
-        emit logMessage("Failed to start pip-compile process.");
-        return false;
-    }
-
-    p.waitForFinished(-1);
-    return p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
-}
-
-bool PipToolsRunner::pipCompile(const QString &inFile, const QString &outFile, int retries)
-{
-    for (int attempt = 1; attempt <= retries; ++attempt)
-    {
-        emit logMessage(QString("Attempting pip-compile (try %1/%2)").arg(attempt).arg(retries));
-        if (runOnce(inFile, outFile))
-        {
-            emit logMessage("pip-compile succeeded.");
-            return true;
-        }
-
-        analyzeLog("logs/pip_compile.log");
-        if (attempt < retries)
-        {
-            emit logMessage("Retrying in 5 seconds...");
-            QThread::sleep(5);
-        }
-    }
-    return false;
-}
-
-void PipToolsRunner::analyzeLog(const QString &logPath)
-{
-    QFile f(logPath);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        emit logMessage("No pip-compile log found to analyze.");
-        return;
-    }
-
-    const QString text = QString::fromUtf8(f.readAll());
-    if (text.contains("No matching distribution found for"))
-    {
-        emit logMessage("Detected missing distribution; consider adjusting baseline.");
-    }
-    else if (text.contains("requires"))
-    {
-        emit logMessage("Dependency conflict detected; consider adjusting dependent baseline.");
-    }
-}
-#-------------------------------------------------------------------------------
-# File: src/PipToolsRunner.h
-#-------------------------------------------------------------------------------
-#pragma once
-#include <QObject>
-
-class PipToolsRunner : public QObject
-{
-    Q_OBJECT
-public:
-    explicit PipToolsRunner(const QString &python, QObject *parent = nullptr);
-    bool pipCompile(const QString &inFile, const QString &outFile, int retries);
-
-signals:
-    void logMessage(const QString &line);
-
-private:
-    QString m_python;
-    bool runOnce(const QString &inFile, const QString &outFile);
-    void analyzeLog(const QString &logPath);
-};
-#-------------------------------------------------------------------------------
-# File: src/ResolverEngine.cpp
-#-------------------------------------------------------------------------------
-#include "ResolverEngine.h"
-#include "PipToolsRunner.h"
-
-#include <QFile>
-#include <QTextStream>
-#include <QThread>
-#include <QtMath>   // for qRound
-
-ResolverEngine::ResolverEngine(QObject *parent)
-    : QObject(parent),
-    m_running(false),
-    m_paused(false),
-    m_stateFile("logs/ITERATION_STATE.txt"),
-    valid(true)
-{
-}
-
-void ResolverEngine::loadRequirementsFromFile(const QString &path)
-{
-    emit logMessage(QString("Loading requirements from file: %1").arg(path));
-    // TODO: parse requirements.txt into m_pkgs
-}
-
-void ResolverEngine::loadRequirementsFromUrl(const QString &url)
-{
-    emit logMessage(QString("Fetching requirements from URL: %1").arg(url));
-    // TODO: download and parse into m_pkgs
-}
-
-void ResolverEngine::start()
-{
-    m_running = true;
-    m_paused = false;
-
-    int combinationCount = 0;
-    QFile sf(m_stateFile);
-    if (sf.open(QIODevice::ReadOnly))
-    {
-        QTextStream ts(&sf);
-        ts >> combinationCount;
-        sf.close();
-    }
-
-    while (m_running)
-    {
-        if (m_paused)
-        {
-            QThread::msleep(200);
-            continue;
-        }
-
-        ++combinationCount;
-        QFile sfw(m_stateFile);
-        if (sfw.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        {
-            QTextStream ts(&sfw);
-            ts << combinationCount;
-        }
-
-        QString inFile, comboStr;
-        buildNextConstraints(inFile, comboStr);
-        emit logMessage(QString("Attempt #%1: %2").arg(combinationCount).arg(comboStr));
-
-        QString outFile = QString("logs/tmp/compiled_requirements_%1.txt").arg(combinationCount);
-        PipToolsRunner runner(QString(), this);
-        if (runner.pipCompile(inFile, outFile, 3))
-        {
-            emit successCompiled(outFile);
-            break;
-        }
-
-        if (!incrementOdometer())
-        {
-            emit logMessage("All combinations exhausted.");
-            stop();
-        }
-
-        emit progressChanged(qRound((double)combinationCount / 1000.0 * 100.0));
-    }
-}
-
-void ResolverEngine::pause()
-{
-    m_paused = true;
-}
-
-void ResolverEngine::resume()
-{
-    m_paused = false;
-}
-
-void ResolverEngine::stop()
-{
-    m_running = false;
-}
-
-void ResolverEngine::buildNextConstraints(QString &inFile, QString &comboStr)
-{
-    // TODO: build constraints.in file from current indices
-    inFile = "logs/tmp/temp_constraints.in";
-    comboStr = "example==1.0.0";
-}
-
-bool ResolverEngine::incrementOdometer()
-{
-    for (int j = m_indices.size() - 1; j >= 0; --j)
-    {
-        m_indices[j]++;
-        if (m_indices[j] <= m_maxIndices[j])
-        {
-            return true;
-        }
-        m_indices[j] = 0;
-    }
-    return false;
-}
-
-bool ResolverEngine::isValid() const
-{
-    return valid;
-}
-
-bool ResolverEngine::resolve(const QString &path)
-{
-    // Stub implementation: succeed if path is non-empty
-    return !path.isEmpty();
-}
-
-#-------------------------------------------------------------------------------
-# File: src/ResolverEngine.h
-#-------------------------------------------------------------------------------
-#pragma once
-
-#include <QObject>
-#include <QVector>
-#include <QStringList>
-#include <QString>
-
-struct PackageCandidates
-{
-    QString pkg;
-    QStringList versions;
-};
-
-class ResolverEngine : public QObject
-{
-    Q_OBJECT
-public:
-    explicit ResolverEngine(QObject *parent = nullptr);
-
-    void loadRequirementsFromFile(const QString &path);
-    void loadRequirementsFromUrl(const QString &url);
-
-    void start();
-    void pause();
-    void resume();
-    void stop();
-
-    // Example methods for unit tests
-    bool isValid() const;
-    bool resolve(const QString &path);
-
-signals:
-    void logMessage(const QString &line);
-    void progressChanged(int percent);
-    void successCompiled(const QString &compiledPath);
-
-private:
-    QVector<PackageCandidates> m_pkgs;
-    QVector<int> m_indices;
-    QVector<int> m_maxIndices;
-    bool m_running;
-    bool m_paused;
-    QString m_stateFile;
-    bool valid;
-
-    void buildNextConstraints(QString &inFile, QString &comboStr);
-    bool incrementOdometer();
-};
-
-#-------------------------------------------------------------------------------
-# File: src/VenvManager.cpp
-#-------------------------------------------------------------------------------
-#include "VenvManager.h"
-#include <QDebug>
-
-VenvManager::VenvManager(QObject *parent) : QObject(parent)
-{
-}
-
-bool VenvManager::createVenv(const QString &dir, const QString &pythonVer)
-{
-    // TODO: implement actual venv creation logic
-    emit logMessage(QString("Creating venv at %1 with Python %2").arg(dir, pythonVer));
-    return true;
-}
-
-bool VenvManager::upgradePip(const QString &pipVer, const QString &pipToolsVer)
-{
-    // TODO: implement actual pip upgrade logic
-    emit logMessage(QString("Upgrading pip to %1 and pip-tools to %2").arg(pipVer, pipToolsVer));
-    return true;
-}
-
-bool VenvManager::createOrUpdate(const QString &dir,
-                                 const QString &pythonVer,
-                                 const QString &pipVer,
-                                 const QString &pipToolsVer)
-{
-    emit logMessage("Starting createOrUpdate workflow...");
-
-    if (!createVenv(dir, pythonVer)) {
-        emit logMessage("createVenv failed");
-        return false;
-    }
-
-    if (!upgradePip(pipVer, pipToolsVer)) {
-        emit logMessage("upgradePip failed");
-        return false;
-    }
-
-    emit logMessage("createOrUpdate completed successfully");
-    return true;
-}
-
-#-------------------------------------------------------------------------------
-# File: src/VenvManager.h
-#-------------------------------------------------------------------------------
-#pragma once
-#include <QObject>
-#include <QString>
-
-class VenvManager : public QObject
-{
-    Q_OBJECT
-public:
-    explicit VenvManager(QObject *parent = nullptr);
-
-    // Existing API
-    bool createVenv(const QString &dir, const QString &pythonVer);
-    bool upgradePip(const QString &pipVer, const QString &pipToolsVer);
-
-    // New convenience wrapper
-    bool createOrUpdate(const QString &dir = "venv",
-                        const QString &pythonVer = "3.11",
-                        const QString &pipVer = "24.0",
-                        const QString &pipToolsVer = "7.4.1");
-
-signals:
-    void logMessage(const QString &line);
-};
-
-#-------------------------------------------------------------------------------
 # File: src/main.cpp
 #-------------------------------------------------------------------------------
 #include <QApplication>
@@ -3240,7 +3425,7 @@ TEST(ResolverEngineTest, BasicSanity)
 # Directory Structure
 #-------------------------------------------------------------------------------
 ├── .qtcreator
-│   ├── qtc-cmake-presets-uEazGGiR
+│   ├── qtc-cmake-presets-vRRckuMy
 │   └── CMakeLists.txt.user
 ├── icons
 │   ├── app.svg
@@ -3256,19 +3441,12 @@ TEST(ResolverEngineTest, BasicSanity)
 │   ├── url.svg
 │   └── venv.svg
 ├── src
-│   ├── BatchRunner.cpp
-│   ├── BatchRunner.h
+│   ├── CommandsTab.cpp
+│   ├── CommandsTab.h
 │   ├── MainWindow.cpp
 │   ├── MainWindow.h
 │   ├── MainWindow.ui
-│   ├── PipToolsRunner.cpp
-│   ├── PipToolsRunner.h
-│   ├── ResolverEngine.cpp
-│   ├── ResolverEngine.h
-│   ├── VenvManager.cpp
-│   ├── VenvManager.h
-│   ├── main.cpp
-│   └── venv_manager.py
+│   └── main.cpp
 ├── tests
 │   ├── gtest_resolver.cpp
 │   ├── qt_test_main.cpp
@@ -3291,6 +3469,7 @@ TEST(ResolverEngineTest, BasicSanity)
 │   └── PipMatrixResolverQt_es.ts
 ├── .gitignore
 ├── CMakeLists.txt
+├── Installation.txt
 ├── LICENSE
 ├── PipMatrixResolverQt.qrc
 ├── README.md

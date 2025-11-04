@@ -3,13 +3,13 @@
  * @brief Declares the main application window class.
  *
  * @author Jeffrey Scott Flesher
- * @version 0.6
- * @date    2025-11-01
+ * @version 0.7
+ * @date    2025-11-03
  * @section License Unlicensed, MIT, or any.
  * @section DESCRIPTION
  * Main window interface for PipMatrixResolver Qt application.
  * Includes settings API, history, menus, and shared loaders for
- * files and URLs. Uses C-style braces.
+ * files and URLs. Uses C-style braces. Now with dynamic UI.
  ***************************************************************/
 
 #pragma once
@@ -21,6 +21,9 @@
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QMenu>
+#include <QMenuBar>
+#include <QToolBar>
+#include <QStatusBar>
 #include <QAction>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -31,15 +34,20 @@
 #include <QDialog>
 #include <QTextBrowser>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFormLayout>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QSettings>
 #include <QDateTime>
 #include <QDebug>
-
-QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
-QT_END_NAMESPACE
+#include <QTabWidget>
+#include <QSplitter>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QListWidget>
+#include "CommandsTab.h"
 
 /****************************************************************
  * @class MainWindow
@@ -109,8 +117,8 @@ private slots:
     void refreshInstalledPackages();
     void onInstalledPackagesListDoubleClicked(const QModelIndex &index);
 
-
 private:
+    void setupUi();
     void loadRequirementsFromFile(const QString &path);
     void loadRequirementsFromUrl(const QString &url);
     void saveHistory();
@@ -150,26 +158,97 @@ private:
     QStringList historyRecentLocal;
     QStringList historyRecentWeb;
 
-    // UI pointers
-    Ui::MainWindow *ui;
+    // UI widgets - Main Window
+    QWidget *centralWidget;
+    QTabWidget *mainTabs;
+    QMenuBar *menuBar;
+    QToolBar *mainToolBar;
+    QStatusBar *statusBar;
+
+    // Menus
+    QMenu *menuFile;
+    QMenu *menuTools;
+    QMenu *menuBatch;
+    QMenu *menuHelp;
+
+    // Tab: Commands
+    QWidget *tabCommands;
+    CommandsTab *commandsTab;
+
+    // Actions
+    QAction *actionOpenRequirements;
+    QAction *actionFetchRequirements;
+    QAction *actionExit;
+    QAction *actionCreateVenv;
+    QAction *actionResolveMatrix;
+    QAction *actionPause;
+    QAction *actionResume;
+    QAction *actionStop;
+    QAction *actionRunBatch;
+    QAction *actionAbout;
+    QAction *actionViewReadme;
+
+    // Tab: Main
+    QWidget *tabMain;
+    QSplitter *splitter;
+    QSplitter *bottomSplitter;
     QStandardItemModel *requirementsModel;
     QTableView *requirementsView;
+    QTableView *matrixView;
     QPlainTextEdit *logView;
+    QProgressBar *progress;
+
+    // Tab: History
+    QWidget *tabHistory;
     QTableView *localHistoryTable;
     QTableView *webHistoryTable;
     QStandardItemModel *localHistoryModel;
     QStandardItemModel *webHistoryModel;
-    QProgressBar *progress;
-    QMenu *recentLocalMenu;
-    QMenu *recentWebMenu;
+    QPushButton *localAddButton;
+    QPushButton *localEditButton;
+    QPushButton *localDeleteButton;
+    QPushButton *localUpButton;
+    QPushButton *localDownButton;
+    QPushButton *webAddButton;
+    QPushButton *webEditButton;
+    QPushButton *webDeleteButton;
+    QPushButton *webUpButton;
+    QPushButton *webDownButton;
 
-    // Settings tab widgets
+    // Tab: Terminal
+    QWidget *tabTerminal;
+    QPlainTextEdit *terminalOutput;
+    QLineEdit *commandInput;
+    QPushButton *runCommandBtn;
+    QPushButton *clearTerminalBtn;
+
+    // Tab: Package Manager
+    QWidget *tabPackageManager;
+    QLineEdit *packageNameInput;
+    QPushButton *searchPackageBtn;
+    QPushButton *installPackageBtn;
+    QPushButton *uninstallPackageBtn;
+    QListWidget *installedPackagesList;
+    QPlainTextEdit *packageOutput;
+
+    // Tab: Settings
+    QWidget *tabSettings;
+    QLineEdit *pythonVersionEdit;
+    QLineEdit *pipVersionEdit;
+    QLineEdit *pipToolsVersionEdit;
+    QSpinBox *spinMaxItems;
     QCheckBox *gpuDetectedCheckBox;
     QCheckBox *useCpuCheckBox;
     QCheckBox *cudaCheckBox;
     QLineEdit *osEdit;
     QLineEdit *osReleaseEdit;
     QLineEdit *osVersionEdit;
+    QPushButton *saveSettingsButton;
+    QPushButton *restoreDefaultsButton;
+    QDialogButtonBox *buttonBoxPreferences;
+
+    QMenu *recentLocalMenu;
+    QMenu *recentWebMenu;
 
     // Venv paths
     QString venvRunningPath;
@@ -179,4 +258,4 @@ private:
     int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
 };
 
-/************** End of MainWindow.h **************************/
+/************** End of MainWindow.h ****************************/
