@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets LinguistTools Network Concurrent Svg)
+
 qt_standard_project_setup()
 
 # Translations
@@ -21,12 +22,14 @@ qt_add_resources(APP_RESOURCES PipMatrixResolverQt.qrc)
 # Executable
 qt_add_executable(PipMatrixResolverQt
     src/main.cpp
-    src/MainWindow.cpp src/MainWindow.h
-    src/CommandsTab.cpp src/CommandsTab.h
-    src/TerminalEngine.cpp src/TerminalEngine.h
+    src/MainWindow.h src/MainWindow.cpp
+    src/CommandsTab.h src/CommandsTab.cpp
+    src/TerminalEngine.h src/TerminalEngine.cpp
     ${APP_RESOURCES}
     ${QM_FILES}
-    src/TerminalEngine.h src/TerminalEngine.cpp
+    src/Settings.h src/Settings.cpp
+    src/Constants.h
+    src/Config.h
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE

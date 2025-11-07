@@ -37,6 +37,7 @@
 #include <QDialog>
 #include <QSpinBox>
 #include <QFileDialog>
+#include "TerminalEngine.h"
 
 /****************************************************************
  * @struct InputDef
@@ -69,9 +70,23 @@ class CommandsTab : public QWidget
     Q_OBJECT
 
 public:
-    explicit CommandsTab(QWidget *parent = nullptr);
+    /************************************************************
+     * @brief Constructor
+     * @param engine Pointer to the TerminalEngine backend
+     * @param parent Optional parent widget
+     ************************************************************/
+    explicit CommandsTab(TerminalEngine* engine, QWidget* parent = nullptr);
     bool loadProjects(const QString &jsonPath);
     bool saveProjects(const QString &jsonPath);
+    /************************************************************
+     * @brief Show a message in the parent MainWindow's status bar
+     * @param msg      The message text
+     * @param timeoutMs Duration in milliseconds (default 5000)
+     ************************************************************/
+    void showStatusMessage(const QString& msg, int timeoutMs = 5000);
+
+signals:
+    void requestStatusMessage(const QString& msg, int timeoutMs);
 
 private slots:
     void onProjectChanged(int index);
@@ -85,8 +100,18 @@ private slots:
     void onBrowseBatchFile();
 
 private:
-    QVector<ProjectDef> projects;
+    void buildUI();
+    void rebuildInputs(const ProjectDef &proj);
+    QString buildCommand() const;
+    bool validateFiles(QString &errorMsg) const;
+    void executeCommand(const QString &cmd);
 
+    // Project editor dialog helpers
+    bool showProjectDialog(ProjectDef &proj, bool isEdit = false);
+    void refreshProjectDropdown();
+    void runNextBatchCommand();   ///< helper to run next queued command
+    // Variables:
+    QVector<ProjectDef> projects;
     QComboBox *projectDropdown;
     QVBoxLayout *inputsLayout;
     QVector<QLineEdit *> inputEdits;
@@ -100,16 +125,11 @@ private:
     QPushButton *editProjectButton;
     QPushButton *deleteProjectButton;
     QToolButton *clearButton;
+    TerminalEngine* engine;
 
-    void buildUI();
-    void rebuildInputs(const ProjectDef &proj);
-    QString buildCommand() const;
-    bool validateFiles(QString &errorMsg) const;
-    void executeCommand(const QString &cmd);
+    QStringList batchQueue;       ///< queued batch commands
+    QProcess* batchProc = nullptr; ///< active batch process
 
-    // Project editor dialog helpers
-    bool showProjectDialog(ProjectDef &proj, bool isEdit = false);
-    void refreshProjectDropdown();
 };
 
 #endif // COMMANDSTAB_H

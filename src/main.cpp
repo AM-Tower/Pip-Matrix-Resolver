@@ -2,9 +2,12 @@
 #include <QTranslator>
 #include <QLocale>
 #include <QFile>
-#include <QDebug>
 #include <QIcon>
+#include <QDebug>
 #include "MainWindow.h"
+#include "Config.h"
+
+#define SHOW_DEBUG 0
 
 int main(int argc, char *argv[])
 {
@@ -26,8 +29,7 @@ int main(int argc, char *argv[])
     QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
 
     // Diagnostics
-    qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
-
+    DEBUG_MSG() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
     // Translation loading
     const QString languageCode = QLocale::system().name().split('_').first();
     auto loadTranslator = [&](const QString &baseName) -> bool

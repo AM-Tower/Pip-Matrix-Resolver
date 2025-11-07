@@ -66,14 +66,19 @@ public:
     static const QString kApplicationName;
     // Globals
     static QString appVersion;
+    void queueStatusMessage(const QString &msg, int timeoutMs);
+    QStatusBar *statusBar;
 
 private slots:
     void openLocalRequirements();
     void fetchRequirementsFromUrl();
     void refreshRecentMenus();
     void clearAllHistory();
-    void loadAppSettings();
+    void onSaveSettings();
+    void onApplySettings();
+    void onRestoreDefaults();
     void saveAppSettings();
+    void loadAppSettings();
     void validateAppSettings();
     void applySettingsFromUi();
     void updateUiFromSettings();
@@ -124,6 +129,9 @@ private slots:
     void onTerminalCommandStarted(const QString &command);
     void onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onVenvProgress(const QString &message);
+    //void onVenvStatusChanged(bool active);
+
+    void onPythonVersionChanged(const QString &newVersion);
 
 private:
     void setupUi();
@@ -162,6 +170,8 @@ private:
     bool downloadText(const QString &url, QByteArray &out);
     QString logsDir();
     void appendTerminalOutput(const QString &text, bool isError);
+    void refreshPythonVersionUI();
+    void showNextStatusMessage();
 
     // History data
     QStringList historyRecentLocal;
@@ -172,7 +182,6 @@ private:
     QTabWidget *mainTabs;
     QMenuBar *menuBar;
     QToolBar *mainToolBar;
-    QStatusBar *statusBar;
 
     // Menus
     QMenu *menuFile;
@@ -269,6 +278,9 @@ private:
 
     // Settings
     int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
+    QStringList statusQueue;
+    QTimer statusTimer;
+
 };
 
 /************** End of MainWindow.h ****************************/

@@ -11,6 +11,7 @@
  * This file contains the implementation of CommandsTab widget.
  ***************************************************************/
 #include "CommandsTab.h"
+#include "MainWindow.h"
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QInputDialog>
@@ -23,12 +24,12 @@
 /****************************************************************
  * @brief Constructor: Builds the UI and loads initial state.
  ***************************************************************/
-CommandsTab::CommandsTab(QWidget *parent) : QWidget(parent)
+CommandsTab::CommandsTab(TerminalEngine* engine, QWidget* parent)
+    : QWidget(parent), engine(engine)
 {
     buildUI();
     loadProjects("projects.json");
 }
-
 /****************************************************************
  * @brief Builds the static UI components.
  ***************************************************************/
@@ -41,12 +42,15 @@ void CommandsTab::buildUI()
     projectDropdown = new QComboBox;
     connect(projectDropdown, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CommandsTab::onProjectChanged);
+
     addProjectButton = new QPushButton("Add");
     editProjectButton = new QPushButton("Edit");
     deleteProjectButton = new QPushButton("Delete");
+
     connect(addProjectButton, &QPushButton::clicked, this, &CommandsTab::onAddProject);
     connect(editProjectButton, &QPushButton::clicked, this, &CommandsTab::onEditProject);
     connect(deleteProjectButton, &QPushButton::clicked, this, &CommandsTab::onDeleteProject);
+
     projLayout->addWidget(new QLabel("Project:"));
     projLayout->addWidget(projectDropdown);
     projLayout->addWidget(addProjectButton);
@@ -219,35 +223,35 @@ void CommandsTab::rebuildInputs(const ProjectDef &proj)
     }
 }
 
-/****************************************************************
- * @brief Builds the full command string.
- ***************************************************************/
 QString CommandsTab::buildCommand() const
 {
     int index = projectDropdown->currentIndex();
     if (index < 0 || index >= projects.size())
-    {
         return QString();
-    }
 
-    const ProjectDef &proj = projects.at(index);
-    QString cmd = QString("python \"%1\" ").arg(proj.scriptPath);
+    const ProjectDef& proj = projects.at(index);
+
+    // Use engine’s resolved interpreter
+    QString pythonExe = engine->pythonCommand();
+    QStringList args;
+
+    args << QString("\"%1\"").arg(proj.scriptPath);
 
     for (int i = 0; i < inputEdits.size(); ++i)
     {
         QString val = inputEdits.at(i)->text().trimmed();
         if (!val.isEmpty())
         {
-            cmd += QString("%1 \"%2\" ").arg(proj.inputs.at(i).switchName, val);
+            args << proj.inputs.at(i).switchName << QString("\"%1\"").arg(val);
         }
     }
 
     if (!extraArgsEdit->text().isEmpty())
     {
-        cmd += extraArgsEdit->text();
+        args << extraArgsEdit->text();
     }
 
-    return cmd.trimmed();
+    return QString("%1 %2").arg(pythonExe, args.join(' '));
 }
 
 /****************************************************************
@@ -310,7 +314,7 @@ void CommandsTab::onRunCommand()
 }
 
 /****************************************************************
- * @brief Runs batch commands from a file.
+ * @brief Runs batch commands sequentially from a file.
  ***************************************************************/
 void CommandsTab::onRunBatch()
 {
@@ -323,6 +327,8 @@ void CommandsTab::onRunBatch()
     }
 
     QTextStream in(&file);
+    batchQueue.clear();
+
     int index = projectDropdown->currentIndex();
     if (index < 0 || index >= projects.size())
     {
@@ -336,40 +342,124 @@ void CommandsTab::onRunBatch()
         QString line = in.readLine().trimmed();
         if (line.isEmpty()) continue;
 
+        // Fill inputs from line
         QStringList batchInputs = line.split(' ', Qt::SkipEmptyParts);
         for (int i = 0; i < inputEdits.size(); ++i)
         {
             if (i < batchInputs.size())
-            {
                 inputEdits.at(i)->setText(batchInputs.at(i));
-            }
             else
-            {
                 inputEdits.at(i)->clear();
-            }
         }
+
         QString cmd = buildCommand();
-        outputConsole->append(QString("Batch Running: %1").arg(cmd));
-        executeCommand(cmd);
+        batchQueue.append(cmd);
     }
+
+    outputConsole->append(QString("Queued %1 batch commands").arg(batchQueue.size()));
+    runNextBatchCommand();
 }
 
 /****************************************************************
- * @brief Executes a command and streams output.
+ * @brief Runs the next command in the batch queue.
+ ***************************************************************/
+void CommandsTab::runNextBatchCommand()
+{
+    if (batchQueue.isEmpty())
+    {
+        outputConsole->append("Batch execution finished.");
+        return;
+    }
+
+    QString cmd = batchQueue.takeFirst();
+    outputConsole->append(QString("Batch Running: %1").arg(cmd));
+
+    // Use venv Python path from engine
+    QString venvPython = engine->venvPythonPath(engine->venvPath);
+    QStringList parts = QProcess::splitCommand(cmd);
+
+    // Replace "python" with venv python
+    if (!parts.isEmpty() && parts.first().toLower() == "python")
+    {
+        parts[0] = venvPython;
+    }
+
+    QString program = parts.takeFirst();
+
+    batchProc = new QProcess(this);
+    batchProc->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(batchProc, &QProcess::readyReadStandardOutput, [this]()
+            {
+                outputConsole->append(batchProc->readAllStandardOutput());
+            });
+    connect(batchProc, &QProcess::readyReadStandardError, [this]()
+            {
+                outputConsole->append(batchProc->readAllStandardError());
+            });
+    connect(batchProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this](int exitCode, QProcess::ExitStatus status)
+            {
+                outputConsole->append(QString("Process finished with code %1, status %2")
+                                          .arg(exitCode).arg(status));
+                batchProc->deleteLater();
+                batchProc = nullptr;
+                runNextBatchCommand(); // run next queued command
+            });
+
+    batchProc->start(program, parts);
+}
+
+/****************************************************************
+ * @brief Executes a command using QProcess with program + args.
+ ***************************************************************/
+/****************************************************************
+ * @brief Executes a command using QProcess with program + args.
  ***************************************************************/
 void CommandsTab::executeCommand(const QString &cmd)
 {
+    // Split program and args safely
+    QStringList parts = QProcess::splitCommand(cmd);
+    if (parts.isEmpty())
+    {
+        showStatusMessage("Invalid command string", 5000);
+        return;
+    }
+
+    QString program = parts.takeFirst();
     QProcess *proc = new QProcess(this);
+
+    // Merge stdout + stderr into one channel
     proc->setProcessChannelMode(QProcess::MergedChannels);
+
+    // Only connect to standard output in merged mode
     connect(proc, &QProcess::readyReadStandardOutput, [this, proc]()
             {
                 outputConsole->append(proc->readAllStandardOutput());
             });
-    connect(proc, &QProcess::readyReadStandardError, [this, proc]()
+
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, proc](int exitCode, QProcess::ExitStatus status)
             {
-                outputConsole->append(proc->readAllStandardError());
+                outputConsole->append(
+                    QString("Process finished with code %1, status %2")
+                        .arg(exitCode)
+                        .arg(status)
+                    );
+                proc->deleteLater();
             });
-    proc->start(cmd);
+
+    proc->start(program, parts);
+}
+
+void CommandsTab::showStatusMessage(const QString& msg, int timeoutMs)
+{
+    // Find the MainWindow that owns this tab
+    MainWindow* mw = qobject_cast<MainWindow*>(window());
+    if (mw && mw->statusBar)
+    {
+        mw->statusBar->showMessage(msg, timeoutMs);
+    }
 }
 
 /****************************************************************
@@ -502,6 +592,7 @@ void CommandsTab::onEditProject()
     {
         return;
     }
+
     ProjectDef proj = projects.at(index);
     if (showProjectDialog(proj, true))
     {

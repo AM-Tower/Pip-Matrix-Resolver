@@ -10,27 +10,36 @@
  * Implements the main window logic: settings, history, menus,
  * file and URL loaders, logging, and UI dialog wiring.
  * Now with dynamic UI setup instead of .ui file.
+ * In Work:
+ *  two venvs (main + test), you can extend TerminalEngine with a testVenvPath and a helper like activateTestVenv() so you can switch contexts cleanly.
+ *  Would you like me to sketch that extension now
+ *  queues a status bar message and mirrors it into the console
+ *  fixed version of runNextBatchCommand() with the same correction, so batch execution doesn’t trigger that warning either
  ***************************************************************/
 
 #include "MainWindow.h"
 #include <QApplication>
+#include <QDebug>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QHeaderView>
+#include <QLabel>
 #include <QNetworkAccessManager>
-#include <QNetworkRequest>
 #include <QNetworkReply>
-#include <QEventLoop>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QSysInfo>
 #include <QUrl>
 #include <utility>
-#include <QSysInfo>
-#include <QProcess>
-#include <QLabel>
+#include "Config.h"
+
+#define SHOW_DEBUG 1
 
 /****************************************************************
  * @brief Globals for MainWindow.
  ***************************************************************/
 QString MainWindow::appVersion = "1.0"; // Change in main
-const QString DEFAULT_PYTHON_VERSION = "3.11";
+const QString DEFAULT_PYTHON_VERSION = "3.10";
 const QString DEFAULT_PIP_VERSION = "23.2";
 const QString DEFAULT_PIPTOOLS_VERSION = "6.13";
 const int DEFAULT_MAX_ITEMS = 10;
@@ -42,20 +51,47 @@ const QString MainWindow::kApplicationName = "PipMatrixResolver";
  * @brief Constructor for MainWindow.
  ***************************************************************/
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent),
-    requirementsModel(new QStandardItemModel(this)),
-    localHistoryModel(new QStandardItemModel(this)),
-    webHistoryModel(new QStandardItemModel(this)),
-    maxHistoryItems(10)
+    : QMainWindow(parent)
+    , requirementsModel(new QStandardItemModel(this))
+    , localHistoryModel(new QStandardItemModel(this))
+    , webHistoryModel(new QStandardItemModel(this))
+    , maxHistoryItems(10)
+    , terminalEngine(new TerminalEngine(this))
 {
     setupUi();
+    // Disable terminal tab at startup
+    tabTerminal->setEnabled(false);
+
+    // Check if venv exists
+    if (terminalEngine->venvExists())
+    {
+        // Activate venv by pointing engine at venv’s Python
+        QString venvPython = terminalEngine->venvPythonPath(terminalEngine->venvPath);
+        terminalEngine->setPythonCommand(venvPython);
+
+        // Enable terminal tab
+        tabTerminal->setEnabled(true);
+        queueStatusMessage(tr("✅ Virtual environment detected and activated."), 5000);
+    }
+    else
+    {
+        queueStatusMessage(tr("⚠️ No virtual environment found. Use Tools → Create venv."), 5000);
+    }
 
     loadAppSettings();
     loadHistory();
-
+    // Statusbar que.
+    connect(&statusTimer, &QTimer::timeout, this, &MainWindow::showNextStatusMessage);
+    connect(commandsTab, &CommandsTab::requestStatusMessage,
+            this, [this](const QString& msg, int timeoutMs){
+                statusBar->showMessage(msg, timeoutMs);
+            });
     // Connect actions
     connect(actionOpenRequirements, &QAction::triggered, this, &MainWindow::openLocalRequirements);
-    connect(actionFetchRequirements, &QAction::triggered, this, &MainWindow::fetchRequirementsFromUrl);
+    connect(actionFetchRequirements,
+            &QAction::triggered,
+            this,
+            &MainWindow::fetchRequirementsFromUrl);
     connect(actionExit, &QAction::triggered, this, &MainWindow::exitApp);
     connect(actionAbout, &QAction::triggered, this, &MainWindow::showAboutBox);
     connect(actionViewReadme, &QAction::triggered, this, &MainWindow::showReadmeDialog);
@@ -68,7 +104,10 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect settings buttons
     if (buttonBoxPreferences)
     {
-        connect(buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
+        connect(buttonBoxPreferences,
+                &QDialogButtonBox::accepted,
+                this,
+                &MainWindow::saveAppSettings);
         QPushButton *applyBtn = buttonBoxPreferences->button(QDialogButtonBox::Apply);
         if (applyBtn)
         {
@@ -77,10 +116,14 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     // Connect history table selection changes
-    connect(localHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
-            this, &MainWindow::updateLocalHistoryButtons);
-    connect(webHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
-            this, &MainWindow::updateWebHistoryButtons);
+    connect(localHistoryTable->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this,
+            &MainWindow::updateLocalHistoryButtons);
+    connect(webHistoryTable->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this,
+            &MainWindow::updateWebHistoryButtons);
 
     // Connect Terminal tab
     connect(runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
@@ -93,14 +136,16 @@ MainWindow::MainWindow(QWidget *parent)
     connect(installPackageBtn, &QPushButton::clicked, this, &MainWindow::onInstallPackage);
     connect(uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
 
-    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int index)
-            {
-                if (mainTabs->widget(index)->objectName() == "tabPackageManager")
-                {
-                    refreshInstalledPackages();
-                }
-            });
-    connect(installedPackagesList, &QListWidget::doubleClicked, this, &MainWindow::onInstalledPackagesListDoubleClicked);
+    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int index) {
+        if (mainTabs->widget(index)->objectName() == "tabPackageManager")
+        {
+            refreshInstalledPackages();
+        }
+    });
+    connect(installedPackagesList,
+            &QListWidget::doubleClicked,
+            this,
+            &MainWindow::onInstalledPackagesListDoubleClicked);
 
     // Refresh tables on startup
     refreshRecentMenus();
@@ -110,14 +155,13 @@ MainWindow::MainWindow(QWidget *parent)
     detectSystem();
     restoreCpuCudaSettings();
     setupVenvPaths();
+
 }
 
 /****************************************************************
  * @brief Destructor for MainWindow.
  ***************************************************************/
-MainWindow::~MainWindow()
-{
-}
+MainWindow::~MainWindow() {}
 
 /****************************************************************
  * @brief Sets up the entire UI dynamically.
@@ -191,7 +235,10 @@ void MainWindow::setupUi()
 
     connect(localAddButton, &QPushButton::clicked, this, &MainWindow::on_localAddButton_clicked);
     connect(localEditButton, &QPushButton::clicked, this, &MainWindow::on_localEditButton_clicked);
-    connect(localDeleteButton, &QPushButton::clicked, this, &MainWindow::on_localDeleteButton_clicked);
+    connect(localDeleteButton,
+            &QPushButton::clicked,
+            this,
+            &MainWindow::on_localDeleteButton_clicked);
     connect(localUpButton, &QPushButton::clicked, this, &MainWindow::on_localUpButton_clicked);
     connect(localDownButton, &QPushButton::clicked, this, &MainWindow::on_localDownButton_clicked);
 
@@ -272,7 +319,7 @@ void MainWindow::setupUi()
     tabCommands->setObjectName("tabCommands");
     QVBoxLayout *commandsLayout = new QVBoxLayout(tabCommands);
 
-    commandsTab = new CommandsTab(tabCommands);
+    commandsTab = new CommandsTab(terminalEngine, tabCommands);
     commandsLayout->addWidget(commandsTab);
 
     mainTabs->addTab(tabCommands, tr("Commands"));
@@ -324,16 +371,17 @@ void MainWindow::setupUi()
 
     settingsLayout->addLayout(formLayout);
 
+    // Buttons and button box
     saveSettingsButton = new QPushButton(tr("Save Settings"), tabSettings);
     settingsLayout->addWidget(saveSettingsButton);
 
     restoreDefaultsButton = new QPushButton(tr("Restore Defaults"), tabSettings);
     settingsLayout->addWidget(restoreDefaultsButton);
 
-    buttonBoxPreferences = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Apply | QDialogButtonBox::Cancel,
-        tabSettings
-        );
+    // Create the button box BEFORE connecting any signals
+    buttonBoxPreferences = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Apply
+                                                    | QDialogButtonBox::Cancel,
+                                                tabSettings);
     settingsLayout->addWidget(buttonBoxPreferences);
 
     mainTabs->addTab(tabSettings, tr("Settings"));
@@ -346,15 +394,19 @@ void MainWindow::setupUi()
     menuFile = new QMenu(tr("&File"), this);
     menuBar->addMenu(menuFile);
 
-    actionOpenRequirements = new QAction(QIcon(":/icons/icons/open.svg"), tr("Open requirements file..."), this);
+    actionOpenRequirements = new QAction(QIcon(":/icons/icons/open.svg"),
+                                         tr("Open requirements file..."),
+                                         this);
     menuFile->addAction(actionOpenRequirements);
 
-    actionFetchRequirements = new QAction(QIcon(":/icons/icons/url.svg"), tr("Fetch requirements from URL..."), this);
+    actionFetchRequirements = new QAction(QIcon(":/icons/icons/url.svg"),
+                                          tr("Fetch requirements from URL..."),
+                                          this);
     menuFile->addAction(actionFetchRequirements);
 
     menuFile->addSeparator();
 
-    // Recent Local and Recent Web submenus
+    // Recent menus (created here, populated later)
     recentLocalMenu = new QMenu(tr("Recent Local"), this);
     menuFile->addMenu(recentLocalMenu);
 
@@ -373,7 +425,9 @@ void MainWindow::setupUi()
     actionCreateVenv = new QAction(QIcon(":/icons/icons/venv.svg"), tr("Create venv"), this);
     menuTools->addAction(actionCreateVenv);
 
-    actionResolveMatrix = new QAction(QIcon(":/icons/icons/resolve.svg"), tr("Resolve matrix"), this);
+    actionResolveMatrix = new QAction(QIcon(":/icons/icons/resolve.svg"),
+                                      tr("Resolve matrix"),
+                                      this);
     menuTools->addAction(actionResolveMatrix);
 
     actionPause = new QAction(QIcon(":/icons/icons/pause.svg"), tr("Pause"), this);
@@ -420,6 +474,65 @@ void MainWindow::setupUi()
     // === STATUS BAR ===
     statusBar = new QStatusBar(this);
     setStatusBar(statusBar);
+
+    // === Terminal Engine wiring and Terminal tab gating ===
+    terminalEngine = new TerminalEngine(this);
+
+    // Connect TerminalEngine signals
+    connect(terminalEngine, &TerminalEngine::outputReceived, this, &MainWindow::onTerminalOutput);
+    connect(terminalEngine,
+            &TerminalEngine::commandStarted,
+            this,
+            &MainWindow::onTerminalCommandStarted);
+    connect(terminalEngine,
+            &TerminalEngine::commandFinished,
+            this,
+            &MainWindow::onTerminalCommandFinished);
+    connect(terminalEngine, &TerminalEngine::venvProgress, this, &MainWindow::onVenvProgress);
+
+    // Settings tab connections (safe order)
+    connect(saveSettingsButton, &QPushButton::clicked, this, &MainWindow::onSaveSettings);
+    connect(restoreDefaultsButton, &QPushButton::clicked, this, &MainWindow::onRestoreDefaults);
+    connect(buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
+    if (QPushButton *applyBtn = buttonBoxPreferences->button(QDialogButtonBox::Apply))
+    {
+        connect(applyBtn, &QPushButton::clicked, this, &MainWindow::onApplySettings);
+    }
+
+    // After creating terminalEngine and before venv checks:
+    QString versionFromSettings = pythonVersionEdit->text().trimmed();
+    terminalEngine->setPythonCommand(versionFromSettings);
+
+    // Default venv path to project-local ".venv"
+    terminalEngine->setVenvPath(QDir::currentPath() + "/.venv");
+
+    // Disable Terminal tab at startup until venv is available and activated
+    int terminalTabIndex = mainTabs->indexOf(tabTerminal);
+    if (terminalTabIndex >= 0)
+    {
+        mainTabs->setTabEnabled(terminalTabIndex, false);
+    }
+
+    // Attempt to enable if venv exists and activation succeeds
+    if (terminalEngine->venvExists())
+    {
+        if (terminalEngine->activateVenv())
+        {
+            if (terminalTabIndex >= 0)
+            {
+                mainTabs->setTabEnabled(terminalTabIndex, true);
+            }
+            queueStatusMessage(tr("Virtual environment detected and activated"), 5000);
+        }
+        else
+        {
+            queueStatusMessage(tr("Virtual environment present but activation failed"), 5000);
+        }
+    }
+    else
+    {
+        queueStatusMessage(tr("No virtual environment found. Use Tools → Create venv."), 5000);
+    }
 }
 
 /****************************************************************
@@ -435,7 +548,10 @@ void MainWindow::exitApp()
  ***************************************************************/
 void MainWindow::openLocalRequirements()
 {
-    QString path = QFileDialog::getOpenFileName(this, tr("Open requirements.txt"), QString(), tr("Text Files (*.txt)"));
+    QString path = QFileDialog::getOpenFileName(this,
+                                                tr("Open requirements.txt"),
+                                                QString(),
+                                                tr("Text Files (*.txt)"));
     if (path.isEmpty())
     {
         return;
@@ -449,14 +565,12 @@ void MainWindow::openLocalRequirements()
 void MainWindow::fetchRequirementsFromUrl()
 {
     bool ok = false;
-    QString inputUrl = QInputDialog::getText(
-        this,
-        tr("Fetch requirements"),
-        tr("Enter URL:"),
-        QLineEdit::Normal,
-        "",
-        &ok
-        );
+    QString inputUrl = QInputDialog::getText(this,
+                                             tr("Fetch requirements"),
+                                             tr("Enter URL:"),
+                                             QLineEdit::Normal,
+                                             "",
+                                             &ok);
     if (!ok || inputUrl.isEmpty())
     {
         return;
@@ -486,11 +600,9 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     QStringList errors;
     if (!validateRequirementsWithErrors(lines, errors))
     {
-        QMessageBox::warning(
-            this,
-            tr("Invalid requirements.txt"),
-            tr("Validation failed:\n%1").arg(errors.join("\n"))
-            );
+        QMessageBox::warning(this,
+                             tr("Invalid requirements.txt"),
+                             tr("Validation failed:\n%1").arg(errors.join("\n")));
         return;
     }
     if (requirementsModel)
@@ -525,7 +637,9 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     QByteArray content;
     if (!downloadText(url, content))
     {
-        QMessageBox::warning(this, tr("Download failed"), tr("Failed to fetch requirements from URL:\n%1").arg(url));
+        QMessageBox::warning(this,
+                             tr("Download failed"),
+                             tr("Failed to fetch requirements from URL:\n%1").arg(url));
         historyRecentWeb.removeAll(url);
         refreshRecentMenus();
         saveHistory();
@@ -535,7 +649,9 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     QStringList errors;
     if (!validateRequirementsWithErrors(lines, errors))
     {
-        QMessageBox::warning(this, tr("Invalid requirements.txt"), tr("Fetched content failed validation:\n%1").arg(errors.join("\n")));
+        QMessageBox::warning(this,
+                             tr("Invalid requirements.txt"),
+                             tr("Fetched content failed validation:\n%1").arg(errors.join("\n")));
         return;
     }
     if (requirementsModel)
@@ -555,9 +671,8 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     }
     refreshRecentMenus();
     saveHistory();
-    appendLog(tr("Fetched %1 requirements from URL: %2")
-                  .arg(requirementsModel->rowCount())
-                  .arg(url));
+    appendLog(
+        tr("Fetched %1 requirements from URL: %2").arg(requirementsModel->rowCount()).arg(url));
 }
 
 /****************************************************************
@@ -574,7 +689,7 @@ void MainWindow::refreshHistoryTables()
     localHistoryModel->setHorizontalHeaderLabels({tr("Recent Local Files")});
     for (const QString &path : std::as_const(localList))
     {
-        QList<QStandardItem*> row;
+        QList<QStandardItem *> row;
         row << new QStandardItem(path);
         localHistoryModel->appendRow(row);
     }
@@ -584,7 +699,7 @@ void MainWindow::refreshHistoryTables()
     webHistoryModel->setHorizontalHeaderLabels({tr("Recent Web URLs")});
     for (const QString &url : std::as_const(webList))
     {
-        QList<QStandardItem*> row;
+        QList<QStandardItem *> row;
         row << new QStandardItem(url);
         webHistoryModel->appendRow(row);
     }
@@ -611,21 +726,17 @@ void MainWindow::refreshRecentMenus()
     {
         const QString &path = historyRecentLocal.at(i);
         QAction *act = recentLocalMenu->addAction(path);
-        connect(act, &QAction::triggered, this, [this, path]()
-                {
-                    loadRequirementsFromFile(path);
-                });
+        connect(act, &QAction::triggered, this, [this, path]() { loadRequirementsFromFile(path); });
     }
     if (!historyRecentLocal.isEmpty())
     {
         recentLocalMenu->addSeparator();
         QAction *clearLocal = recentLocalMenu->addAction(tr("Clear Local History"));
-        connect(clearLocal, &QAction::triggered, this, [this]()
-                {
-                    historyRecentLocal.clear();
-                    refreshRecentMenus();
-                    saveHistory();
-                });
+        connect(clearLocal, &QAction::triggered, this, [this]() {
+            historyRecentLocal.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
     }
 
     // Populate Recent Web
@@ -633,21 +744,17 @@ void MainWindow::refreshRecentMenus()
     {
         const QString &url = historyRecentWeb.at(i);
         QAction *act = recentWebMenu->addAction(url);
-        connect(act, &QAction::triggered, this, [this, url]()
-                {
-                    loadRequirementsFromUrl(url);
-                });
+        connect(act, &QAction::triggered, this, [this, url]() { loadRequirementsFromUrl(url); });
     }
     if (!historyRecentWeb.isEmpty())
     {
         recentWebMenu->addSeparator();
         QAction *clearWeb = recentWebMenu->addAction(tr("Clear Web History"));
-        connect(clearWeb, &QAction::triggered, this, [this]()
-                {
-                    historyRecentWeb.clear();
-                    refreshRecentMenus();
-                    saveHistory();
-                });
+        connect(clearWeb, &QAction::triggered, this, [this]() {
+            historyRecentWeb.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
     }
 }
 
@@ -664,39 +771,117 @@ void MainWindow::clearAllHistory()
 }
 
 /****************************************************************
- * @brief Loads application settings from QSettings to UI.
+ * @brief Loads persisted application + Settings values at startup.
  ***************************************************************/
 void MainWindow::loadAppSettings()
 {
     QSettings settings;
-    maxHistoryItems = settings.value("app/maxItems", 10).toInt();
+
+    // Load values with defaults
+    QString pythonVer = settings.value("PythonVersion", DEFAULT_PYTHON_VERSION).toString();
+    QString pipVer = settings.value("PipVersion", DEFAULT_PIP_VERSION).toString();
+    QString pipToolsVer = settings.value("PipToolsVersion", DEFAULT_PIPTOOLS_VERSION).toString();
+    int maxItems = settings.value("app/maxItems", DEFAULT_MAX_ITEMS).toInt();
+
+    // Update internal state
+    maxHistoryItems = maxItems;
+
+    // Update UI fields
+    pythonVersionEdit->setText(pythonVer);
+    pipVersionEdit->setText(pipVer);
+    pipToolsVersionEdit->setText(pipToolsVer);
+    spinMaxItems->setValue(maxItems);
+
+    // Apply Python command immediately
+    terminalEngine->setPythonCommand(pythonVer);
+
+    // Validate and sync UI
     validateAppSettings();
     updateUiFromSettings();
 }
 
 /****************************************************************
- * @brief Saves application settings from UI to QSettings.
+ * @brief Save Settings button handler.
+ ***************************************************************/
+void MainWindow::onSaveSettings()
+{
+    QString pythonVer = pythonVersionEdit->text().trimmed();
+    QString pipVer = pipVersionEdit->text().trimmed();
+    QString pipToolsVer = pipToolsVersionEdit->text().trimmed();
+    int maxItems = spinMaxItems->value();
+
+    terminalEngine->setPythonCommand(pythonVer);
+
+    QSettings settings;
+    settings.setValue("PythonVersion", pythonVer);
+    settings.setValue("PipVersion", pipVer);
+    settings.setValue("PipToolsVersion", pipToolsVer);
+    settings.setValue("app/maxItems", maxItems);
+    settings.sync();
+
+    queueStatusMessage(tr("Settings saved. Python command updated to: %1").arg(terminalEngine->pythonCommand()), 5000);
+}
+
+/****************************************************************
+ * @brief Apply Settings button handler.
+ ***************************************************************/
+void MainWindow::onApplySettings()
+{
+    QString pythonVer = pythonVersionEdit->text().trimmed();
+    terminalEngine->setPythonCommand(pythonVer);
+
+    queueStatusMessage(tr("Settings applied. Python command updated to: %1").arg(terminalEngine->pythonCommand()), 5000);
+}
+
+/****************************************************************
+ * @brief Restore Defaults button handler.
+ ***************************************************************/
+void MainWindow::onRestoreDefaults()
+{
+    // Reset UI fields using constants
+    pythonVersionEdit->setText(DEFAULT_PYTHON_VERSION);
+    pipVersionEdit->setText(DEFAULT_PIP_VERSION);
+    pipToolsVersionEdit->setText(DEFAULT_PIPTOOLS_VERSION);
+    spinMaxItems->setValue(DEFAULT_MAX_ITEMS);
+    useCpuCheckBox->setChecked(false);
+    cudaCheckBox->setChecked(false);
+
+    // Update runtime Python command using default
+    terminalEngine->setPythonCommand(DEFAULT_PYTHON_VERSION);
+
+    // Persist defaults
+    QSettings settings;
+    settings.setValue("PythonVersion", DEFAULT_PYTHON_VERSION);
+    settings.setValue("PipVersion", DEFAULT_PIP_VERSION);
+    settings.setValue("PipToolsVersion", DEFAULT_PIPTOOLS_VERSION);
+    settings.setValue("app/maxItems", DEFAULT_MAX_ITEMS);
+    settings.setValue("AppVersion", DEFAULT_APP_VERSION);
+    settings.sync();
+
+    queueStatusMessage(tr("Defaults restored. Python command set to: %1").arg(terminalEngine->pythonCommand()), 5000);
+}
+
+/****************************************************************
+ * @brief Save Settings when dialog accepted (OK).
  ***************************************************************/
 void MainWindow::saveAppSettings()
 {
-    applySettingsFromUi();
-    validateAppSettings();
+    QString pythonVer = pythonVersionEdit->text().trimmed();
+    QString pipVer = pipVersionEdit->text().trimmed();
+    QString pipToolsVer = pipToolsVersionEdit->text().trimmed();
+    int maxItems = spinMaxItems->value();
+
+    terminalEngine->setPythonCommand(pythonVer);
+
     QSettings settings;
-    settings.setValue("app/maxItems", maxHistoryItems);
-    statusBar->showMessage(tr("Settings saved"), 2000);
-    if (maxHistoryItems != -1)
-    {
-        while (historyRecentLocal.size() > maxHistoryItems)
-        {
-            historyRecentLocal.removeLast();
-        }
-        while (historyRecentWeb.size() > maxHistoryItems)
-        {
-            historyRecentWeb.removeLast();
-        }
-    }
-    refreshRecentMenus();
-    saveHistory();
+    settings.setValue("PythonVersion", pythonVer);
+    settings.setValue("PipVersion", pipVer);
+    settings.setValue("PipToolsVersion", pipToolsVer);
+    settings.setValue("app/maxItems", maxItems);
+    settings.setValue("AppVersion", DEFAULT_APP_VERSION);
+    settings.sync();
+
+    queueStatusMessage(tr("Application settings saved. Python command updated to: %1").arg(terminalEngine->pythonCommand()), 5000);
 }
 
 /****************************************************************
@@ -735,7 +920,10 @@ void MainWindow::updateUiFromSettings()
  ***************************************************************/
 void MainWindow::writeTableToModel(const QStringList &lines)
 {
-    if (!requirementsModel || !requirementsView) { return; }
+    if (!requirementsModel || !requirementsView)
+    {
+        return;
+    }
     requirementsModel->clear();
     requirementsModel->setColumnCount(1);
     requirementsModel->setHorizontalHeaderLabels({tr("requirements.txt")});
@@ -802,7 +990,7 @@ void MainWindow::updateProgress(int percent)
 void MainWindow::showCompiledResult(const QString &path)
 {
     appendLog(tr("Successfully compiled: %1").arg(path));
-    statusBar->showMessage(tr("Compiled successfully"));
+    queueStatusMessage(tr("Compiled successfully"), 5000);
 }
 
 /****************************************************************
@@ -810,13 +998,11 @@ void MainWindow::showCompiledResult(const QString &path)
  ***************************************************************/
 void MainWindow::showAboutBox()
 {
-    QMessageBox::about(this,
-                       tr("About Pip Matrix Resolver"),
-                       tr("<b>Pip Matrix Resolver</b><br>"
-                          "Cross-platform Qt tool to resolve "
-                          "Python dependency matrices.<br>"
-                          "Version %1").arg(appVersion)
-                       );
+    QMessageBox::about(
+        this,
+        tr("About Pip Matrix Resolver"),
+        tr("<b>Pip Matrix Resolver</b><br>" "Cross-platform Qt tool to resolve " "Python dependency matrices.<br>" "Version %1")
+            .arg(appVersion));
 }
 
 /****************************************************************
@@ -1013,7 +1199,12 @@ void MainWindow::stopResolve()
 void MainWindow::on_localAddButton_clicked()
 {
     bool ok;
-    QString path = QInputDialog::getText(this, tr("Add Local File"), tr("File path:"), QLineEdit::Normal, "", &ok);
+    QString path = QInputDialog::getText(this,
+                                         tr("Add Local File"),
+                                         tr("File path:"),
+                                         QLineEdit::Normal,
+                                         "",
+                                         &ok);
     if (ok && !path.isEmpty())
     {
         QSettings s(kOrganizationName, kApplicationName);
@@ -1030,14 +1221,22 @@ void MainWindow::on_localAddButton_clicked()
 void MainWindow::on_localEditButton_clicked()
 {
     QModelIndex idx = localHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
     QString oldValue = list.at(idx.row());
     bool ok;
-    QString newValue = QInputDialog::getText(this, tr("Edit Local File"), tr("File path:"), QLineEdit::Normal, oldValue, &ok);
-    if (!ok) return; // User cancelled, do nothing
-    if (newValue.isEmpty()) return; // Optionally, do nothing if empty
+    QString newValue = QInputDialog::getText(this,
+                                             tr("Edit Local File"),
+                                             tr("File path:"),
+                                             QLineEdit::Normal,
+                                             oldValue,
+                                             &ok);
+    if (!ok)
+        return; // User cancelled, do nothing
+    if (newValue.isEmpty())
+        return; // Optionally, do nothing if empty
     list[idx.row()] = newValue;
     s.setValue("history/recentLocal", list);
     refreshHistoryTables();
@@ -1049,7 +1248,8 @@ void MainWindow::on_localEditButton_clicked()
 void MainWindow::on_localDeleteButton_clicked()
 {
     QModelIndex idx = localHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
     list.removeAt(idx.row());
@@ -1063,7 +1263,8 @@ void MainWindow::on_localDeleteButton_clicked()
 void MainWindow::on_localUpButton_clicked()
 {
     QModelIndex idx = localHistoryTable->currentIndex();
-    if (!idx.isValid() || idx.row() == 0) return;
+    if (!idx.isValid() || idx.row() == 0)
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
     list.swapItemsAt(idx.row(), idx.row() - 1);
@@ -1080,7 +1281,8 @@ void MainWindow::on_localDownButton_clicked()
     QModelIndex idx = localHistoryTable->currentIndex();
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
-    if (!idx.isValid() || idx.row() >= list.size() - 1) return;
+    if (!idx.isValid() || idx.row() >= list.size() - 1)
+        return;
     list.swapItemsAt(idx.row(), idx.row() + 1);
     s.setValue("history/recentLocal", list);
     refreshHistoryTables();
@@ -1093,7 +1295,8 @@ void MainWindow::on_localDownButton_clicked()
 void MainWindow::on_webAddButton_clicked()
 {
     bool ok;
-    QString url = QInputDialog::getText(this, tr("Add Web URL"), tr("URL:"), QLineEdit::Normal, "", &ok);
+    QString url
+        = QInputDialog::getText(this, tr("Add Web URL"), tr("URL:"), QLineEdit::Normal, "", &ok);
     if (ok && !url.isEmpty())
     {
         QSettings s(kOrganizationName, kApplicationName);
@@ -1110,14 +1313,22 @@ void MainWindow::on_webAddButton_clicked()
 void MainWindow::on_webEditButton_clicked()
 {
     QModelIndex idx = webHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
     QString oldValue = list.at(idx.row());
     bool ok;
-    QString newValue = QInputDialog::getText(this, tr("Edit Web URL"), tr("URL:"), QLineEdit::Normal, oldValue, &ok);
-    if (!ok) return; // User cancelled, do nothing
-    if (newValue.isEmpty()) return; // Optionally, do nothing if empty
+    QString newValue = QInputDialog::getText(this,
+                                             tr("Edit Web URL"),
+                                             tr("URL:"),
+                                             QLineEdit::Normal,
+                                             oldValue,
+                                             &ok);
+    if (!ok)
+        return; // User cancelled, do nothing
+    if (newValue.isEmpty())
+        return; // Optionally, do nothing if empty
     list[idx.row()] = newValue;
     s.setValue("history/recentWeb", list);
     refreshHistoryTables();
@@ -1129,7 +1340,8 @@ void MainWindow::on_webEditButton_clicked()
 void MainWindow::on_webDeleteButton_clicked()
 {
     QModelIndex idx = webHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
     list.removeAt(idx.row());
@@ -1143,7 +1355,8 @@ void MainWindow::on_webDeleteButton_clicked()
 void MainWindow::on_webUpButton_clicked()
 {
     QModelIndex idx = webHistoryTable->currentIndex();
-    if (!idx.isValid() || idx.row() == 0) return;
+    if (!idx.isValid() || idx.row() == 0)
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
     list.swapItemsAt(idx.row(), idx.row() - 1);
@@ -1160,7 +1373,8 @@ void MainWindow::on_webDownButton_clicked()
     QModelIndex idx = webHistoryTable->currentIndex();
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
-    if (!idx.isValid() || idx.row() >= list.size() - 1) return;
+    if (!idx.isValid() || idx.row() >= list.size() - 1)
+        return;
     list.swapItemsAt(idx.row(), idx.row() + 1);
     s.setValue("history/recentWeb", list);
     refreshHistoryTables();
@@ -1269,7 +1483,8 @@ void MainWindow::checkAndRestoreSettings()
     pipVersionEdit->setText(pipVersion);
 
     // pip-tools version
-    QString pipToolsVersion = s.value("settings/pipToolsVersion", DEFAULT_PIPTOOLS_VERSION).toString();
+    QString pipToolsVersion = s.value("settings/pipToolsVersion", DEFAULT_PIPTOOLS_VERSION)
+                                  .toString();
     if (pipToolsVersion.isEmpty())
     {
         pipToolsVersion = DEFAULT_PIPTOOLS_VERSION;
@@ -1321,8 +1536,10 @@ void MainWindow::detectSystem()
         while (!f.atEnd())
         {
             QString line = f.readLine();
-            if (line.startsWith("ID=")) release = line.mid(3).trimmed().replace("\"", "");
-            if (line.startsWith("VERSION_ID=")) version = line.mid(11).trimmed().replace("\"", "");
+            if (line.startsWith("ID="))
+                release = line.mid(3).trimmed().replace("\"", "");
+            if (line.startsWith("VERSION_ID="))
+                version = line.mid(11).trimmed().replace("\"", "");
         }
     }
 #endif
@@ -1335,19 +1552,22 @@ void MainWindow::detectSystem()
     proc.start("wmic path win32_VideoController get name");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+    if (output.contains("NVIDIA", Qt::CaseInsensitive))
+        gpuDetected = true;
 #elif defined(Q_OS_LINUX)
     QProcess proc;
     proc.start("lspci");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+    if (output.contains("NVIDIA", Qt::CaseInsensitive))
+        gpuDetected = true;
 #elif defined(Q_OS_MAC)
     QProcess proc;
     proc.start("system_profiler SPDisplaysDataType");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+    if (output.contains("NVIDIA", Qt::CaseInsensitive))
+        gpuDetected = true;
 #endif
     if (!gpuDetected)
     {
@@ -1363,11 +1583,11 @@ void MainWindow::detectSystem()
     s.setValue("settings/gpuDetected", gpuDetected);
     if (gpuDetected)
     {
-        statusBar->showMessage(tr("GPU Detected"));
+        queueStatusMessage(tr("GPU Detected"), 5000);
     }
     else
     {
-        statusBar->showMessage(tr("GPU Not Detected"));
+        queueStatusMessage(tr("GPU Not Detected"), 5000);
     }
 }
 
@@ -1383,9 +1603,11 @@ void MainWindow::onCreateVenv()
         pythonVersion = DEFAULT_PYTHON_VERSION;
     }
 
-    // Get pip and pip-tools versions
+    // Get pip and pip-tools versions (currently informational)
     QString pipVersion = pipVersionEdit->text().trimmed();
     QString pipToolsVersion = pipToolsVersionEdit->text().trimmed();
+    Q_UNUSED(pipVersion);
+    Q_UNUSED(pipToolsVersion);
 
     // Set venv path
     QString venvPath = QDir::currentPath() + "/.venv";
@@ -1401,7 +1623,7 @@ void MainWindow::onCreateVenv()
     appendTerminalOutput(QString("Virtual environment path: %1").arg(venvPath), false);
     appendTerminalOutput("", false);
 
-    // Create venv in a separate thread would be better, but for now we'll use direct call
+    // UI state during creation
     QApplication::setOverrideCursor(Qt::WaitCursor);
     runCommandBtn->setEnabled(false);
     stopCommandBtn->setEnabled(false);
@@ -1412,18 +1634,37 @@ void MainWindow::onCreateVenv()
     stopCommandBtn->setEnabled(false);
     QApplication::restoreOverrideCursor();
 
+    int terminalTabIndex = mainTabs->indexOf(tabTerminal);
+
     if (success)
     {
         appendTerminalOutput("", false);
         appendTerminalOutput("=== Virtual Environment Ready ===", false);
         appendTerminalOutput("You can now run Python commands, pip, and pip-tools", false);
-        statusBar->showMessage(tr("Virtual environment created successfully"), 5000);
+
+        // Try to activate and enable Terminal tab
+        if (terminalEngine->activateVenv())
+        {
+            if (terminalTabIndex >= 0)
+            {
+                mainTabs->setTabEnabled(terminalTabIndex, true);
+            }
+            queueStatusMessage(tr("Virtual environment created and activated"), 5000);
+        }
+        else
+        {
+            queueStatusMessage(tr("Virtual environment created, but activation failed"), 5000);
+        }
     }
     else
     {
         appendTerminalOutput("", false);
         appendTerminalOutput("=== Virtual Environment Creation Failed ===", true);
-        statusBar->showMessage(tr("Failed to create virtual environment"), 5000);
+        if (terminalTabIndex >= 0)
+        {
+            mainTabs->setTabEnabled(terminalTabIndex, false);
+        }
+        queueStatusMessage(tr("Failed to create virtual environment"), 5000);
     }
 }
 
@@ -1476,7 +1717,7 @@ void MainWindow::onTerminalCommandStarted(const QString &command)
 {
     runCommandBtn->setEnabled(false);
     stopCommandBtn->setEnabled(true);
-    statusBar->showMessage(QString("Executing: %1").arg(command));
+    queueStatusMessage(QString("Executing: %1").arg(command), 5000);
 }
 
 /****************************************************************
@@ -1489,11 +1730,11 @@ void MainWindow::onTerminalCommandFinished(int exitCode, QProcess::ExitStatus ex
 
     if (exitStatus == QProcess::NormalExit && exitCode == 0)
     {
-        statusBar->showMessage(tr("Command completed successfully"), 3000);
+        queueStatusMessage(tr("Command completed successfully"), 5000);
     }
     else
     {
-        statusBar->showMessage(tr("Command failed"), 3000);
+        queueStatusMessage(tr("Command failed"), 5000);
     }
 }
 
@@ -1561,7 +1802,10 @@ void MainWindow::setupVenvPaths()
 bool MainWindow::detectGpuViaPowerShell()
 {
     QProcess proc;
-    proc.start("powershell", QStringList() << "-Command" << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
+    proc.start(
+        "powershell",
+        QStringList() << "-Command"
+                      << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
     return output.contains("NVIDIA", Qt::CaseInsensitive);
@@ -1604,11 +1848,14 @@ bool MainWindow::detectGpuViaNvidiaSmi()
 bool MainWindow::detectNvidiaGpu()
 {
     // Primary test: PowerShell WMI
-    if (detectGpuViaPowerShell()) return true;
+    if (detectGpuViaPowerShell())
+        return true;
     // Fallback 1: dxdiag
-    if (detectGpuViaDxDiag()) return true;
+    if (detectGpuViaDxDiag())
+        return true;
     // Fallback 2: nvidia-smi
-    if (detectGpuViaNvidiaSmi()) return true;
+    if (detectGpuViaNvidiaSmi())
+        return true;
     // Not detected
     return false;
 }
@@ -1643,7 +1890,8 @@ void MainWindow::onSearchPackage()
 }
 
 /****************************************************************
- * @brief On Installed Packages List Double Clicked.
+ * @brief Handles double-click on installed package list item.
+ * @param index The model index of the double-clicked item.
  ***************************************************************/
 void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
 {
@@ -1735,185 +1983,58 @@ void MainWindow::refreshInstalledPackages()
 }
 
 /****************************************************************
- * @brief Handles double-click on installed package list item.
- * @param index The model index of the double-clicked item.
+ * @brief Handles immediate UI update when Python version changes.
+ * @param newVersion The new Python version string (e.g., "3.11").
  ***************************************************************/
-void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
+void MainWindow::onPythonVersionChanged(const QString &newVersion)
 {
-    QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
-    packageNameInput->setText(pkg);
-    onUninstallPackage();
+    // Update the Settings field immediately
+    if (pythonVersionEdit)
+        pythonVersionEdit->setText(newVersion);
+
+    // Reload other settings for consistency
+    loadAppSettings();
+
+    DEBUG_MSG() << "[DEBUG] UI updated to Python version:" << newVersion;
 }
 
 /****************************************************************
- * @brief on Create Venv.
+ * @brief Refreshes the Python version displayed in the Settings UI.
  ***************************************************************/
-void MainWindow::onCreateVenv()
+void MainWindow::refreshPythonVersionUI()
 {
-    // Get Python version from settings
-    QString pythonVersion = pythonVersionEdit->text().trimmed();
-    if (pythonVersion.isEmpty())
+    QSettings settings;
+    QString currentVersion = settings.value("PythonVersion", "3.10").toString();
+
+    if (pythonVersionEdit)
+        pythonVersionEdit->setText(currentVersion);
+}
+
+void MainWindow::queueStatusMessage(const QString& msg, int timeoutMs)
+{
+    statusQueue.append(msg);
+    if (!statusTimer.isActive())
     {
-        pythonVersion = DEFAULT_PYTHON_VERSION;
+        // Start immediately if idle
+        statusBar->showMessage(statusQueue.takeFirst(), timeoutMs);
+        statusTimer.start(timeoutMs);
     }
+}
 
-    // Get pip and pip-tools versions
-    QString pipVersion = pipVersionEdit->text().trimmed();
-    QString pipToolsVersion = pipToolsVersionEdit->text().trimmed();
-
-    // Set venv path
-    QString venvPath = QDir::currentPath() + "/.venv";
-    terminalEngine->setVenvPath(venvPath);
-
-    // Switch to terminal tab
-    mainTabs->setCurrentWidget(tabTerminal);
-
-    // Clear terminal and show progress
-    terminalOutput->clear();
-    appendTerminalOutput("=== Creating Virtual Environment ===", false);
-    appendTerminalOutput(QString("Python version: %1").arg(pythonVersion), false);
-    appendTerminalOutput(QString("Virtual environment path: %1").arg(venvPath), false);
-    appendTerminalOutput("", false);
-
-    // Create venv in a separate thread would be better, but for now we'll use direct call
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    runCommandBtn->setEnabled(false);
-    stopCommandBtn->setEnabled(false);
-
-    bool success = terminalEngine->createVirtualEnvironment(pythonVersion);
-
-    runCommandBtn->setEnabled(true);
-    stopCommandBtn->setEnabled(false);
-    QApplication::restoreOverrideCursor();
-
-    if (success)
+void MainWindow::showNextStatusMessage()
+{
+    statusTimer.stop();
+    if (!statusQueue.isEmpty())
     {
-        appendTerminalOutput("", false);
-        appendTerminalOutput("=== Virtual Environment Ready ===", false);
-        appendTerminalOutput("You can now run Python commands, pip, and pip-tools", false);
-        statusBar->showMessage(tr("Virtual environment created successfully"), 5000);
+        QString msg = statusQueue.takeFirst();
+        int timeoutMs = 5000; // default timeout per message
+        statusBar->showMessage(msg, timeoutMs);
+        statusTimer.start(timeoutMs);
     }
     else
     {
-        appendTerminalOutput("", false);
-        appendTerminalOutput("=== Virtual Environment Creation Failed ===", true);
-        statusBar->showMessage(tr("Failed to create virtual environment"), 5000);
+        statusBar->clearMessage();
     }
-}
-
-/****************************************************************
- * @brief on Run Command.
- ***************************************************************/
-void MainWindow::onRunCommand()
-{
-    QString command = commandInput->text().trimmed();
-    if (command.isEmpty())
-    {
-        return;
-    }
-
-    // Clear input
-    commandInput->clear();
-
-    // Execute command
-    terminalEngine->executeCommand(command);
-}
-
-/****************************************************************
- * @brief on Clear Terminal.
- ***************************************************************/
-void MainWindow::onClearTerminal()
-{
-    terminalOutput->clear();
-}
-
-/****************************************************************
- * @brief on Stop Command.
- ***************************************************************/
-void MainWindow::onStopCommand()
-{
-    terminalEngine->stopCurrentProcess();
-}
-
-/****************************************************************
- * @brief Handles terminal output from TerminalEngine.
- ***************************************************************/
-void MainWindow::onTerminalOutput(const QString &output, bool isError)
-{
-    appendTerminalOutput(output, isError);
-}
-
-/****************************************************************
- * @brief Handles terminal command started event.
- ***************************************************************/
-void MainWindow::onTerminalCommandStarted(const QString &command)
-{
-    runCommandBtn->setEnabled(false);
-    stopCommandBtn->setEnabled(true);
-    statusBar->showMessage(QString("Executing: %1").arg(command));
-}
-
-/****************************************************************
- * @brief Handles terminal command finished event.
- ***************************************************************/
-void MainWindow::onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus)
-{
-    runCommandBtn->setEnabled(true);
-    stopCommandBtn->setEnabled(false);
-
-    if (exitStatus == QProcess::NormalExit && exitCode == 0)
-    {
-        statusBar->showMessage(tr("Command completed successfully"), 3000);
-    }
-    else
-    {
-        statusBar->showMessage(tr("Command failed"), 3000);
-    }
-}
-
-/****************************************************************
- * @brief Handles venv progress messages.
- ***************************************************************/
-void MainWindow::onVenvProgress(const QString &message)
-{
-    appendTerminalOutput(message, false);
-    QApplication::processEvents(); // Update UI
-}
-
-/****************************************************************
- * @brief Helper to append text to terminal output with color.
- ***************************************************************/
-void MainWindow::appendTerminalOutput(const QString &text, bool isError)
-{
-    if (text.isEmpty())
-    {
-        terminalOutput->appendPlainText("");
-        return;
-    }
-
-    QTextCursor cursor = terminalOutput->textCursor();
-    cursor.movePosition(QTextCursor::End);
-
-    QTextCharFormat format;
-    if (isError)
-    {
-        format.setForeground(QColor(Qt::red));
-    }
-    else if (text.startsWith("===") || text.startsWith("$"))
-    {
-        format.setForeground(QColor(Qt::blue));
-        format.setFontWeight(QFont::Bold);
-    }
-    else
-    {
-        format.setForeground(QColor(Qt::black));
-    }
-
-    cursor.setCharFormat(format);
-    cursor.insertText(text + "\n");
-
-    terminalOutput->setTextCursor(cursor);
-    terminalOutput->ensureCursorVisible();
 }
 
 /************** End of MainWindow.cpp ***************************/

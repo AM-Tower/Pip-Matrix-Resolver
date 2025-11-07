@@ -13,13 +13,25 @@
 #include <QFileInfo>
 #include <QDebug>
 #include <QCoreApplication>
+#include <QStandardPaths>
+#include <QMessageBox>
+#include <QDesktopServices>
+#include <QSettings>
+#include <QUrl>
+#include <QPushButton>
+#include <QProcess>
+#include "Settings.h"        // central source of truth
+#include "Config.h"
 
+#define SHOW_DEBUG 1
+
+// Static globals
+QString TerminalEngine::g_pythonExe;
+QStringList TerminalEngine::g_pythonBaseArgs;
 /****************************************************************
  * @brief Constructor: Initializes the terminal engine.
  ***************************************************************/
-TerminalEngine::TerminalEngine(QObject *parent)
-    : QObject(parent),
-    currentProcess(nullptr)
+TerminalEngine::TerminalEngine(QObject *parent) : QObject(parent), currentProcess(nullptr)
 {
     venvPath = QDir::current().filePath(".venv");
 }
@@ -57,16 +69,155 @@ QString TerminalEngine::getVenvPath() const
 }
 
 /****************************************************************
- * @brief Creates a new virtual environment.
+ * @brief Sets the global Python command based on Settings version.
+ *        Validates actual interpreter version and warns if mismatch.
+ * @param versionFromSettings Version string (e.g., "3.10 or 3.11").
+ ***************************************************************/
+/****************************************************************
+ * @brief Sets the Python command based on Settings or defaults.
+ *        Probes the actual interpreter version and handles
+ *        mismatches by prompting the user to install or switch.
+ *
+ * @param versionFromSettings The Python version string from Settings.
+ ***************************************************************/
+void TerminalEngine::setPythonCommand(const QString &versionFromSettings)
+{
+    g_pythonExe.clear();
+    g_pythonBaseArgs.clear();
+
+#ifdef Q_OS_WIN
+    QString pyPath = QStandardPaths::findExecutable("py");
+    if (!pyPath.isEmpty())
+    {
+        g_pythonExe = pyPath;
+        g_pythonBaseArgs << (versionFromSettings.isEmpty() ? "-3" : "-" + versionFromSettings);
+    }
+    else
+    {
+        QString pythonPath = QStandardPaths::findExecutable("python");
+        g_pythonExe = pythonPath.isEmpty() ? "python" : pythonPath;
+    }
+#else
+    g_pythonExe = versionFromSettings.isEmpty()
+                      ? "python3"
+                      : QString("python%1").arg(versionFromSettings);
+#endif
+
+    // Probe actual version
+    QProcess proc;
+    proc.start(g_pythonExe, g_pythonBaseArgs + QStringList{"--version"});
+    proc.waitForFinished(3000);
+    QString output = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+
+    if (!versionFromSettings.isEmpty() && !output.contains(versionFromSettings))
+    {
+        // Detect available versions
+        QStringList detectedVersions;
+        QStringList candidates = {"python3.10", "python3.11", "python3.12", "python3.13", "python"};
+
+        // FIX: use index-based loop to avoid detach warning
+        for (int i = 0; i < candidates.size(); ++i)
+        {
+            const QString &candidate = candidates.at(i);
+            QString exe = QStandardPaths::findExecutable(candidate);
+            if (!exe.isEmpty())
+            {
+                QProcess p;
+                p.start(exe, {"--version"});
+                p.waitForFinished(2000);
+                QString verOut = QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+                if (!verOut.isEmpty())
+                {
+                    detectedVersions << verOut;
+                }
+            }
+        }
+
+        // Load configured default version from Settings
+        QSettings settings;
+        QString defaultVersion = settings.value("PythonVersion", "3.10").toString();
+
+        QMessageBox msgBox;
+        msgBox.setWindowTitle(tr("Python Version Mismatch"));
+        msgBox.setText(tr("Requested Python %1, but found %2.")
+                           .arg(versionFromSettings, output));
+        msgBox.setInformativeText(tr("Choose an action:"));
+
+        QPushButton *installBtn = msgBox.addButton(
+            tr("Install Python %1").arg(defaultVersion),
+            QMessageBox::ActionRole);
+
+        QVector<QPushButton*> switchButtons;
+        for (int i = 0; i < detectedVersions.size(); ++i)
+        {
+            const QString &ver = detectedVersions.at(i);
+            QPushButton *btn = msgBox.addButton(
+                tr("Switch default to %1").arg(ver),
+                QMessageBox::ActionRole);
+            switchButtons.append(btn);
+        }
+
+        msgBox.addButton(QMessageBox::Cancel);
+        msgBox.exec();
+
+        if (msgBox.clickedButton() == installBtn)
+        {
+            // Build installer URL dynamically
+            QString installerUrl = QString("https://www.python.org/ftp/python/%1.0/python-%1.0-amd64.exe")
+                                       .arg(defaultVersion);
+            QDesktopServices::openUrl(QUrl(installerUrl));
+
+            // Update Settings to reflect chosen default
+            settings.setValue("PythonVersion", defaultVersion);
+            settings.sync();
+        }
+        else
+        {
+            for (int i = 0; i < switchButtons.size(); ++i)
+            {
+                if (msgBox.clickedButton() == switchButtons[i])
+                {
+                    QString chosenVersion = detectedVersions[i].section(' ', 1, 1);
+                    settings.setValue("PythonVersion", chosenVersion);
+                    settings.sync();
+
+                    // Re‑apply with new version
+                    TerminalEngine::setPythonCommand(chosenVersion);
+                    break;
+                }
+            }
+        }
+    }
+
+    DEBUG_MSG() << "[DEBUG] setPythonCommand resolved:" << g_pythonExe << g_pythonBaseArgs << "Reported:" << output;
+}
+
+/****************************************************************
+ * @brief Returns base args (e.g., -3.11).
+ ***************************************************************/
+QStringList TerminalEngine::pythonBaseArgs()
+{
+    return g_pythonBaseArgs;
+}
+
+/****************************************************************
+ * @brief Creates a Python virtual environment and upgrades pip/pip-tools.
+ *        Handles both Windows launcher (py.exe) and direct python.exe.
+ *        Removes any existing venv first, then runs the command.
+ *
+ * @param pythonVersion Version selector (e.g. "-3.10") if using py.exe
+ * @return true if venv created successfully, false otherwise
  ***************************************************************/
 bool TerminalEngine::createVirtualEnvironment(const QString &pythonVersion)
 {
+    DEBUG_MSG() << "Enter createVirtualEnvironment()";
+    DEBUG_MSG() << "Target venv path:" << venvPath;
+
     emit venvProgress("Checking for existing virtual environment...");
 
-    // Remove existing venv if it exists
     if (venvExists())
     {
-        emit venvProgress("Removing existing virtual environment...");
+        DEBUG_MSG() << "Existing venv found, removing...";
         if (!removeVirtualEnvironment())
         {
             emit outputReceived("Failed to remove existing virtual environment", true);
@@ -74,51 +225,143 @@ bool TerminalEngine::createVirtualEnvironment(const QString &pythonVersion)
         }
     }
 
-    emit venvProgress("Creating new virtual environment...");
+    QString pythonExe = pythonCommand();
+    QStringList args = pythonBaseArgs();
 
-    // Find Python executable
-    QString pythonExe = "python";
-    if (!pythonVersion.isEmpty())
+    if (pythonExe.contains("py.exe", Qt::CaseInsensitive) && !pythonVersion.isEmpty())
     {
-        pythonExe = QString("python%1").arg(pythonVersion);
+        DEBUG_MSG() << "Detected py.exe → adding version selector:" << pythonVersion;
+        args << pythonVersion << "-m" << "venv" << venvPath;
+    }
+    else
+    {
+        DEBUG_MSG() << "Detected direct python interpreter → no version selector";
+        args << "-m" << "venv" << venvPath;
     }
 
-    // Create venv
+    DEBUG_MSG() << "Using Python executable:" << pythonExe;
+    DEBUG_MSG() << "Command line:" << pythonExe << args;
+
     QProcess process;
-    QStringList args;
-    args << "-m" << "venv" << venvPath;
-
-    emit venvProgress(QString("Executing: %1 %2").arg(pythonExe, args.join(" ")));
-
+    process.setProcessChannelMode(QProcess::MergedChannels);
     process.start(pythonExe, args);
-    process.waitForFinished(60000); // 60 second timeout
 
-    if (process.exitCode() != 0 || !venvExists())
+    if (!process.waitForStarted(5000))
     {
-        QString error = process.readAllStandardError();
-        emit outputReceived(QString("Failed to create virtual environment: %1").arg(error), true);
+        emit outputReceived("Failed to start Python process", true);
+        return false;
+    }
+
+    bool finished = process.waitForFinished(60000);
+
+    QString stdOut = QString::fromUtf8(process.readAllStandardOutput());
+    QString stdErr = QString::fromUtf8(process.readAllStandardError());
+
+    DEBUG_MSG() << "Process finished:" << finished
+                << " Exit code:" << process.exitCode()
+                << " Exit status:" << process.exitStatus()
+                << " Error:" << process.error();
+    DEBUG_MSG() << "StdOut:" << stdOut;
+    DEBUG_MSG() << "StdErr:" << stdErr;
+
+    if (!finished || process.exitCode() != 0 || !venvExists())
+    {
+        emit outputReceived(QString("Failed to create virtual environment: %1").arg(stdErr), true);
         return false;
     }
 
     emit venvProgress("Virtual environment created successfully");
-    emit outputReceived("Virtual environment created at: " + venvPath, false);
 
-    // Upgrade pip
-    emit venvProgress("Upgrading pip...");
-    if (!upgradePip())
+    // 🔧 NEW STEP: upgrade pip and install pip-tools
+    QString venvPython = venvPath + "/Scripts/python.exe"; // Windows path
+    QStringList upgradeArgs;
+    upgradeArgs << "-m" << "pip" << "install" << "--upgrade" << "pip" << "pip-tools";
+
+    DEBUG_MSG() << "Upgrading pip and installing pip-tools...";
+    QProcess upgradeProc;
+    upgradeProc.setProcessChannelMode(QProcess::MergedChannels);
+    upgradeProc.start(venvPython, upgradeArgs);
+    upgradeProc.waitForFinished(60000);
+
+    QString upgradeOut = QString::fromUtf8(upgradeProc.readAllStandardOutput());
+    QString upgradeErr = QString::fromUtf8(upgradeProc.readAllStandardError());
+
+    DEBUG_MSG() << "Upgrade StdOut:" << upgradeOut;
+    DEBUG_MSG() << "Upgrade StdErr:" << upgradeErr;
+
+    if (upgradeProc.exitCode() != 0)
     {
-        emit outputReceived("Warning: Failed to upgrade pip", true);
+        emit outputReceived(QString("pip upgrade failed: %1").arg(upgradeErr), true);
+        return false;
     }
 
-    // Install pip-tools
-    emit venvProgress("Installing pip-tools...");
-    if (!installPipTools())
-    {
-        emit outputReceived("Warning: Failed to install pip-tools", true);
-    }
-
-    emit venvProgress("Virtual environment setup complete");
+    emit venvProgress("pip and pip-tools upgraded successfully");
     return true;
+}
+
+/****************************************************************
+ * @brief Attempts to activate the virtual environment by probing python.
+ * @return true if activation succeeds, false otherwise.
+ ***************************************************************/
+bool TerminalEngine::activateVenv()
+{
+    DEBUG_MSG() << "Enter activateVenv()";
+
+    // Use global Python command resolved at startup
+    QString pythonExe = TerminalEngine::pythonCommand();
+    QStringList args = TerminalEngine::pythonBaseArgs();
+    args << "--version";
+
+    DEBUG_MSG() << "Activation probe:" << pythonExe << args;
+
+    QProcess proc;
+    proc.start(pythonExe, args);
+
+    if (!proc.waitForStarted(5000))
+    {
+        DEBUG_MSG() << "Activation probe failed to start:" << proc.errorString();
+        return false;
+    }
+
+    bool finished = proc.waitForFinished(10000);
+    QString stdOut = QString::fromUtf8(proc.readAllStandardOutput());
+    QString stdErr = QString::fromUtf8(proc.readAllStandardError());
+
+    DEBUG_MSG() << "Finished:" << finished
+                          << "Exit code:" << proc.exitCode()
+                          << "StdOut:" << stdOut
+                          << "StdErr:" << stdErr;
+
+    if (!finished || proc.exitCode() != 0)
+    {
+        return false;
+    }
+
+    // If we got a version string back, consider activation successful
+    return !stdOut.isEmpty() || !stdErr.isEmpty();
+}
+
+
+/****************************************************************
+ * @brief Gets venv status information.
+ * @return Status string describing venv state.
+ ***************************************************************/
+QString TerminalEngine::getVenvStatus() const
+{
+    if (!venvExists())
+    {
+        return QString("venv: missing (%1)").arg(venvPath);
+    }
+
+    QFileInfo pyInfo(getPythonExecutable());
+    QFileInfo pipInfo(getPipExecutable());
+
+    QStringList parts;
+    parts << QString("venv: present (%1)").arg(venvPath);
+    parts << QString("python: %1 %2").arg(pyInfo.exists() ? "OK" : "MISSING").arg(pyInfo.filePath());
+    parts << QString("pip: %1 %2").arg(pipInfo.exists() ? "OK" : "MISSING").arg(pipInfo.filePath());
+
+    return parts.join(" | ");
 }
 
 /****************************************************************
@@ -139,43 +382,24 @@ bool TerminalEngine::venvExists() const
 }
 
 /****************************************************************
- * @brief Upgrades pip in the virtual environment.
+ * @brief Upgrades pip inside the virtual environment.
+ * @return true if successful, false otherwise.
  ***************************************************************/
-bool TerminalEngine::upgradePip(const QString &version)
+bool TerminalEngine::upgradePip()
 {
-    if (!venvExists())
-    {
-        emit outputReceived("Virtual environment does not exist", true);
-        return false;
-    }
+    QStringList args = TerminalEngine::pythonBaseArgs();
+    args << "-m" << "pip" << "install" << "--upgrade" << "pip";
+    QString pythonExe = TerminalEngine::pythonCommand();
 
-    QString pythonExe = getPythonExecutable();
-    QStringList args;
-    args << "-m" << "pip" << "install" << "--upgrade";
+    DEBUG_MSG() << "Upgrading pip with:" << pythonExe << args;
 
-    if (version.isEmpty())
-    {
-        args << "pip";
-    }
-    else
-    {
-        args << QString("pip==%1").arg(version);
-    }
+    QProcess proc;
+    proc.start(pythonExe, args);
+    proc.waitForFinished(30000);
 
-    QProcess process;
-    process.start(pythonExe, args);
-    process.waitForFinished(120000); // 2 minute timeout
+    DEBUG_MSG() << "Exit code:" << proc.exitCode() << "StdErr:" << QString::fromUtf8(proc.readAllStandardError());
 
-    QString output = process.readAllStandardOutput();
-    QString error = process.readAllStandardError();
-
-    emit outputReceived(output, false);
-    if (!error.isEmpty())
-    {
-        emit outputReceived(error, true);
-    }
-
-    return process.exitCode() == 0;
+    return proc.exitCode() == 0;
 }
 
 /****************************************************************
@@ -223,13 +447,14 @@ bool TerminalEngine::installPipTools(const QString &version)
  ***************************************************************/
 void TerminalEngine::executeCommand(const QString &command)
 {
-    if (command.trimmed().isEmpty())
+    QString cmd = command.trimmed();
+    if (cmd.isEmpty())
     {
         emit outputReceived("No command entered", true);
         return;
     }
 
-    currentCommand = command.trimmed();
+    currentCommand = cmd;
     emit commandStarted(currentCommand);
 
     logMessage(QString("$ %1").arg(currentCommand));
@@ -352,7 +577,8 @@ void TerminalEngine::onProcessError(QProcess::ProcessError error)
  ***************************************************************/
 void TerminalEngine::parseAndExecuteCommand(const QString &command)
 {
-    QString cmd = command.trimmed();
+    // Make a copy to ensure we have a stable string
+    QString cmd = command;
 
     // Check for pip commands
     if (cmd.startsWith("pip "))
@@ -562,6 +788,66 @@ void TerminalEngine::logMessage(const QString &message, bool isError)
 {
     QString timestamp = QDateTime::currentDateTime().toString("[HH:mm:ss]");
     emit outputReceived(QString("%1 %2").arg(timestamp, message), isError);
+}
+
+bool TerminalEngine::isCommandRunnable(const QString& command) const
+{
+    QProcess proc;
+    QStringList args;
+    args << QStringLiteral("--version");
+
+    proc.start(command, args);
+    bool started = proc.waitForStarted(3000);
+    if (!started)
+    {
+        return false;
+    }
+
+    bool finished = proc.waitForFinished(5000);
+    if (!finished)
+    {
+        proc.kill();
+        proc.waitForFinished(2000);
+        return false;
+    }
+
+    int exitCode = proc.exitCode();
+    return (exitCode == 0);
+}
+
+QString TerminalEngine::pythonCommand() const
+{
+    const QString configured = Settings::instance()->pythonInterpreter();
+
+    if (isCommandRunnable(configured))
+    {
+        return configured;
+    }
+
+    qWarning() << "Configured Python interpreter not runnable:" << configured;
+
+    const QString fallback = Settings::instance()->defaultPythonInterpreter();
+    if (isCommandRunnable(fallback))
+    {
+        qInfo() << "Falling back to default Python interpreter:" << fallback;
+        return fallback;
+    }
+
+    qCritical() << "No valid Python interpreter found. Update Settings or install the required version.";
+    return configured;
+}
+
+/****************************************************************
+ * @brief Returns the path to the Python executable inside a venv.
+ *        Handles Windows, Linux, and macOS layouts.
+ ***************************************************************/
+QString TerminalEngine::venvPythonPath(const QString& venvPath) const
+{
+#ifdef Q_OS_WIN
+    return QDir(venvPath).filePath("Scripts/python.exe");
+#else
+    return QDir(venvPath).filePath("bin/python3");
+#endif
 }
 
 /************** End of TerminalEngine.cpp ***********************/

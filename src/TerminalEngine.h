@@ -19,13 +19,13 @@
 #ifndef TERMINALENGINE_H
 #define TERMINALENGINE_H
 
-#include <QDateTime>
+#include <QObject>
+#include <QString>
+#include <QProcess>
 #include <QDir>
 #include <QFile>
-#include <QObject>
-#include <QProcess>
-#include <QString>
 #include <QTextStream>
+#include <QDateTime>
 
 /****************************************************************
  * @class TerminalEngine
@@ -39,6 +39,12 @@ public:
     explicit TerminalEngine(QObject *parent = nullptr);
     ~TerminalEngine();
 
+    /****************************************************************
+     * @brief Sets Python command globally.
+     * @param Gets version From Settings.
+     ***************************************************************/
+    static void setPythonCommand(const QString &versionFromSettings);
+    static QStringList pythonBaseArgs();
     /****************************************************************
      * @brief Sets the virtual environment path.
      * @param venvPath Absolute path to the virtual environment.
@@ -65,11 +71,22 @@ public:
     bool venvExists() const;
 
     /****************************************************************
-     * @brief Upgrades pip in the virtual environment.
-     * @param version Specific pip version or empty for latest.
+     * @brief Activates an existing virtual environment.
      * @return true if successful, false otherwise.
      ***************************************************************/
-    bool upgradePip(const QString &version = QString());
+    bool activateVenv();
+
+    /****************************************************************
+     * @brief Gets venv status information.
+     * @return Status string describing venv state.
+     ***************************************************************/
+    QString getVenvStatus() const;
+
+    /****************************************************************
+     * @brief Upgrades pip in the virtual environment.
+     * @return true if successful, false otherwise.
+     ***************************************************************/
+    bool upgradePip();
 
     /****************************************************************
      * @brief Installs pip-tools in the virtual environment.
@@ -100,6 +117,13 @@ public:
      * @return Path to pip executable.
      ***************************************************************/
     QString getPipExecutable() const;
+    /****************************************************************
+     * @brief Resolve the Python interpreter command for execution.
+     * @return Validated Python interpreter command (name or path).
+     ***************************************************************/
+    QString pythonCommand() const;
+    QString venvPythonPath(const QString &venvPath) const;
+    QString venvPath;
 
 signals:
     /****************************************************************
@@ -135,10 +159,12 @@ private slots:
     void onProcessError(QProcess::ProcessError error);
 
 private:
-    QString venvPath;
-    QProcess *currentProcess;
-    QString currentCommand;
-
+    /****************************************************************
+     * @brief Checks if a command is runnable by invoking --version.
+     * @param command Interpreter command (name or absolute path).
+     * @return true if process starts and returns exit code 0.
+     ***************************************************************/
+    bool isCommandRunnable(const QString& command) const;
     /****************************************************************
      * @brief Parses and routes the command to appropriate handler.
      * @param command The command to parse.
@@ -195,6 +221,12 @@ private:
      * @param isError true if error message.
      ***************************************************************/
     void logMessage(const QString &message, bool isError = false);
+
+    QProcess *currentProcess;
+    QString currentCommand;
+    static QString g_pythonExe;
+    static QStringList g_pythonBaseArgs;
+
 };
 
 #endif // TERMINALENGINE_H

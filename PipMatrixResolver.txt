@@ -1,6 +1,6 @@
 #===============================================================================
 # Project: PipMatrixResolver
-# Generated on: 2025-11-04 11:20:26
+# Generated on: 2025-11-06 21:50:47
 # OS: WSL on Ubuntu: 24.04
 # This file is used to show full source code, cmake, read me, and file locates.
 #================================C
@@ -16,6 +16,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Widgets LinguistTools Network Concurrent Svg)
+
 qt_standard_project_setup()
 
 # Translations
@@ -31,10 +32,14 @@ qt_add_resources(APP_RESOURCES PipMatrixResolverQt.qrc)
 # Executable
 qt_add_executable(PipMatrixResolverQt
     src/main.cpp
-    src/MainWindow.cpp src/MainWindow.h
-    src/CommandsTab.cpp src/CommandsTab.h
+    src/MainWindow.h src/MainWindow.cpp
+    src/CommandsTab.h src/CommandsTab.cpp
+    src/TerminalEngine.h src/TerminalEngine.cpp
     ${APP_RESOURCES}
     ${QM_FILES}
+    src/Settings.h src/Settings.cpp
+    src/Constants.h
+    src/Config.h
 )
 
 target_link_libraries(PipMatrixResolverQt PRIVATE
@@ -81,7 +86,7 @@ elseif(APPLE)
         )
     endif()
 elseif(UNIX)
-    message(STATUS "✅ Linux build — Qt runtime deployment handled by system packages.")
+    message(STATUS "✅ Linux build – Qt runtime deployment handled by system packages.")
 endif()
 
 # Packaging with CPack (Qt Installer, NSIS, DEB/RPM)
@@ -375,12 +380,12 @@ On Windows, windeployqt is run automatically after build.
 /****************************************************************
  * @brief Constructor: Builds the UI and loads initial state.
  ***************************************************************/
-CommandsTab::CommandsTab(QWidget *parent) : QWidget(parent)
+CommandsTab::CommandsTab(TerminalEngine* engine, QWidget* parent)
+    : QWidget(parent), engine(engine)
 {
     buildUI();
     loadProjects("projects.json");
 }
-
 /****************************************************************
  * @brief Builds the static UI components.
  ***************************************************************/
@@ -393,12 +398,15 @@ void CommandsTab::buildUI()
     projectDropdown = new QComboBox;
     connect(projectDropdown, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CommandsTab::onProjectChanged);
+
     addProjectButton = new QPushButton("Add");
     editProjectButton = new QPushButton("Edit");
     deleteProjectButton = new QPushButton("Delete");
+
     connect(addProjectButton, &QPushButton::clicked, this, &CommandsTab::onAddProject);
     connect(editProjectButton, &QPushButton::clicked, this, &CommandsTab::onEditProject);
     connect(deleteProjectButton, &QPushButton::clicked, this, &CommandsTab::onDeleteProject);
+
     projLayout->addWidget(new QLabel("Project:"));
     projLayout->addWidget(projectDropdown);
     projLayout->addWidget(addProjectButton);
@@ -571,35 +579,35 @@ void CommandsTab::rebuildInputs(const ProjectDef &proj)
     }
 }
 
-/****************************************************************
- * @brief Builds the full command string.
- ***************************************************************/
 QString CommandsTab::buildCommand() const
 {
     int index = projectDropdown->currentIndex();
     if (index < 0 || index >= projects.size())
-    {
         return QString();
-    }
 
-    const ProjectDef &proj = projects.at(index);
-    QString cmd = QString("python \"%1\" ").arg(proj.scriptPath);
+    const ProjectDef& proj = projects.at(index);
+
+    // Use engine’s resolved interpreter
+    QString pythonExe = engine->pythonCommand();
+    QStringList args;
+
+    args << QString("\"%1\"").arg(proj.scriptPath);
 
     for (int i = 0; i < inputEdits.size(); ++i)
     {
         QString val = inputEdits.at(i)->text().trimmed();
         if (!val.isEmpty())
         {
-            cmd += QString("%1 \"%2\" ").arg(proj.inputs.at(i).switchName, val);
+            args << proj.inputs.at(i).switchName << QString("\"%1\"").arg(val);
         }
     }
 
     if (!extraArgsEdit->text().isEmpty())
     {
-        cmd += extraArgsEdit->text();
+        args << extraArgsEdit->text();
     }
 
-    return cmd.trimmed();
+    return QString("%1 %2").arg(pythonExe, args.join(' '));
 }
 
 /****************************************************************
@@ -662,7 +670,7 @@ void CommandsTab::onRunCommand()
 }
 
 /****************************************************************
- * @brief Runs batch commands from a file.
+ * @brief Runs batch commands sequentially from a file.
  ***************************************************************/
 void CommandsTab::onRunBatch()
 {
@@ -675,6 +683,8 @@ void CommandsTab::onRunBatch()
     }
 
     QTextStream in(&file);
+    batchQueue.clear();
+
     int index = projectDropdown->currentIndex();
     if (index < 0 || index >= projects.size())
     {
@@ -688,31 +698,91 @@ void CommandsTab::onRunBatch()
         QString line = in.readLine().trimmed();
         if (line.isEmpty()) continue;
 
+        // Fill inputs from line
         QStringList batchInputs = line.split(' ', Qt::SkipEmptyParts);
         for (int i = 0; i < inputEdits.size(); ++i)
         {
             if (i < batchInputs.size())
-            {
                 inputEdits.at(i)->setText(batchInputs.at(i));
-            }
             else
-            {
                 inputEdits.at(i)->clear();
-            }
         }
+
         QString cmd = buildCommand();
-        outputConsole->append(QString("Batch Running: %1").arg(cmd));
-        executeCommand(cmd);
+        batchQueue.append(cmd);
     }
+
+    outputConsole->append(QString("Queued %1 batch commands").arg(batchQueue.size()));
+    runNextBatchCommand();
 }
 
 /****************************************************************
- * @brief Executes a command and streams output.
+ * @brief Runs the next command in the batch queue.
+ ***************************************************************/
+void CommandsTab::runNextBatchCommand()
+{
+    if (batchQueue.isEmpty())
+    {
+        outputConsole->append("Batch execution finished.");
+        return;
+    }
+
+    QString cmd = batchQueue.takeFirst();
+    outputConsole->append(QString("Batch Running: %1").arg(cmd));
+
+    // Use venv Python path from engine
+    QString venvPython = engine->venvPythonPath(engine->venvPath);
+    QStringList parts = QProcess::splitCommand(cmd);
+
+    // Replace "python" with venv python
+    if (!parts.isEmpty() && parts.first().toLower() == "python")
+    {
+        parts[0] = venvPython;
+    }
+
+    QString program = parts.takeFirst();
+
+    batchProc = new QProcess(this);
+    batchProc->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(batchProc, &QProcess::readyReadStandardOutput, [this]()
+            {
+                outputConsole->append(batchProc->readAllStandardOutput());
+            });
+    connect(batchProc, &QProcess::readyReadStandardError, [this]()
+            {
+                outputConsole->append(batchProc->readAllStandardError());
+            });
+    connect(batchProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this](int exitCode, QProcess::ExitStatus status)
+            {
+                outputConsole->append(QString("Process finished with code %1, status %2")
+                                          .arg(exitCode).arg(status));
+                batchProc->deleteLater();
+                batchProc = nullptr;
+                runNextBatchCommand(); // run next queued command
+            });
+
+    batchProc->start(program, parts);
+}
+
+/****************************************************************
+ * @brief Executes a command using QProcess with program + args.
  ***************************************************************/
 void CommandsTab::executeCommand(const QString &cmd)
 {
+    // Split program and args safely
+    QStringList parts = QProcess::splitCommand(cmd);
+    if (parts.isEmpty())
+    {
+        outputConsole->append("Invalid command string");
+        return;
+    }
+
+    QString program = parts.takeFirst();
     QProcess *proc = new QProcess(this);
     proc->setProcessChannelMode(QProcess::MergedChannels);
+
     connect(proc, &QProcess::readyReadStandardOutput, [this, proc]()
             {
                 outputConsole->append(proc->readAllStandardOutput());
@@ -721,7 +791,14 @@ void CommandsTab::executeCommand(const QString &cmd)
             {
                 outputConsole->append(proc->readAllStandardError());
             });
-    proc->start(cmd);
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, proc](int exitCode, QProcess::ExitStatus status)
+            {
+                outputConsole->append(QString("Process finished with code %1, status %2")
+                                          .arg(exitCode).arg(status));
+            });
+
+    proc->start(program, parts);
 }
 
 /****************************************************************
@@ -854,6 +931,7 @@ void CommandsTab::onEditProject()
     {
         return;
     }
+
     ProjectDef proj = projects.at(index);
     if (showProjectDialog(proj, true))
     {
@@ -941,6 +1019,7 @@ void CommandsTab::refreshProjectDropdown()
 #include <QDialog>
 #include <QSpinBox>
 #include <QFileDialog>
+#include "TerminalEngine.h"
 
 /****************************************************************
  * @struct InputDef
@@ -973,7 +1052,12 @@ class CommandsTab : public QWidget
     Q_OBJECT
 
 public:
-    explicit CommandsTab(QWidget *parent = nullptr);
+    /************************************************************
+     * @brief Constructor
+     * @param engine Pointer to the TerminalEngine backend
+     * @param parent Optional parent widget
+     ************************************************************/
+    explicit CommandsTab(TerminalEngine* engine, QWidget* parent = nullptr);
     bool loadProjects(const QString &jsonPath);
     bool saveProjects(const QString &jsonPath);
 
@@ -989,8 +1073,18 @@ private slots:
     void onBrowseBatchFile();
 
 private:
-    QVector<ProjectDef> projects;
+    void buildUI();
+    void rebuildInputs(const ProjectDef &proj);
+    QString buildCommand() const;
+    bool validateFiles(QString &errorMsg) const;
+    void executeCommand(const QString &cmd);
 
+    // Project editor dialog helpers
+    bool showProjectDialog(ProjectDef &proj, bool isEdit = false);
+    void refreshProjectDropdown();
+    void runNextBatchCommand();   ///< helper to run next queued command
+    // Variables:
+    QVector<ProjectDef> projects;
     QComboBox *projectDropdown;
     QVBoxLayout *inputsLayout;
     QVector<QLineEdit *> inputEdits;
@@ -1004,20 +1098,77 @@ private:
     QPushButton *editProjectButton;
     QPushButton *deleteProjectButton;
     QToolButton *clearButton;
+    TerminalEngine* engine;
 
-    void buildUI();
-    void rebuildInputs(const ProjectDef &proj);
-    QString buildCommand() const;
-    bool validateFiles(QString &errorMsg) const;
-    void executeCommand(const QString &cmd);
+    QStringList batchQueue;       ///< queued batch commands
+    QProcess* batchProc = nullptr; ///< active batch process
 
-    // Project editor dialog helpers
-    bool showProjectDialog(ProjectDef &proj, bool isEdit = false);
-    void refreshProjectDropdown();
 };
 
 #endif // COMMANDSTAB_H
 /************** End of CommandsTab.h ***************************/
+
+#-------------------------------------------------------------------------------
+# File: src/Config.h
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file Config.h
+ * @brief Global configuration macros.
+ ***************************************************************/
+#pragma once
+
+// Toggle debug output: set to 1 to enable, 0 to disable
+// #define SHOW_DEBUG 1
+
+#if SHOW_DEBUG
+    #define DEBUG_MSG() qDebug()
+#else
+    #define DEBUG_MSG() if (true) {} else qDebug()
+#endif
+/************** End of Config.h **************************/
+
+#-------------------------------------------------------------------------------
+# File: src/Constants.h
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file Constants.h
+ * @brief Centralized application constants (no hard-coded literals).
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.6 [Increment]
+ * @date    2025-11-06 [Todays date]
+ * @section License Unlicensed, MIT, or any.
+ * @section DESCRIPTION
+ * This file declares project-wide constants for defaults and
+ * platform-specific settings to ensure maintainability and
+ * onboarding parity across Windows, Linux, and macOS.
+ ***************************************************************/
+#pragma once
+#include <QString>
+
+/****************************************************************
+ * @brief Returns the platform-appropriate default Python command.
+ * @return Default Python command name (e.g., "python" or "python3").
+ ***************************************************************/
+inline QString defaultPythonCommand()
+{
+#ifdef _WIN32
+    return QStringLiteral("python");
+#else
+    return QStringLiteral("python3");
+#endif
+}
+
+/****************************************************************
+ * @brief Constant accessor for the default Python interpreter.
+ * @return Default Python interpreter command.
+ ***************************************************************/
+inline QString DEFAULT_PYTHON_INTERPRETER()
+{
+    return defaultPythonCommand();
+}
+
+/************** End of Constants.h **************************/
 
 #-------------------------------------------------------------------------------
 # File: src/MainWindow.cpp
@@ -1038,23 +1189,27 @@ private:
 
 #include "MainWindow.h"
 #include <QApplication>
+#include <QDebug>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QHeaderView>
+#include <QLabel>
 #include <QNetworkAccessManager>
-#include <QNetworkRequest>
 #include <QNetworkReply>
-#include <QEventLoop>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QSysInfo>
 #include <QUrl>
 #include <utility>
-#include <QSysInfo>
-#include <QProcess>
-#include <QLabel>
+#include "Config.h"
+
+#define SHOW_DEBUG 1
 
 /****************************************************************
  * @brief Globals for MainWindow.
  ***************************************************************/
 QString MainWindow::appVersion = "1.0"; // Change in main
-const QString DEFAULT_PYTHON_VERSION = "3.11";
+const QString DEFAULT_PYTHON_VERSION = "3.10";
 const QString DEFAULT_PIP_VERSION = "23.2";
 const QString DEFAULT_PIPTOOLS_VERSION = "6.13";
 const int DEFAULT_MAX_ITEMS = 10;
@@ -1066,11 +1221,12 @@ const QString MainWindow::kApplicationName = "PipMatrixResolver";
  * @brief Constructor for MainWindow.
  ***************************************************************/
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent),
-    requirementsModel(new QStandardItemModel(this)),
-    localHistoryModel(new QStandardItemModel(this)),
-    webHistoryModel(new QStandardItemModel(this)),
-    maxHistoryItems(10)
+    : QMainWindow(parent)
+    , requirementsModel(new QStandardItemModel(this))
+    , localHistoryModel(new QStandardItemModel(this))
+    , webHistoryModel(new QStandardItemModel(this))
+    , maxHistoryItems(10)
+    , terminalEngine(new TerminalEngine(this))
 {
     setupUi();
 
@@ -1079,7 +1235,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Connect actions
     connect(actionOpenRequirements, &QAction::triggered, this, &MainWindow::openLocalRequirements);
-    connect(actionFetchRequirements, &QAction::triggered, this, &MainWindow::fetchRequirementsFromUrl);
+    connect(actionFetchRequirements,
+            &QAction::triggered,
+            this,
+            &MainWindow::fetchRequirementsFromUrl);
     connect(actionExit, &QAction::triggered, this, &MainWindow::exitApp);
     connect(actionAbout, &QAction::triggered, this, &MainWindow::showAboutBox);
     connect(actionViewReadme, &QAction::triggered, this, &MainWindow::showReadmeDialog);
@@ -1092,7 +1251,10 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect settings buttons
     if (buttonBoxPreferences)
     {
-        connect(buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
+        connect(buttonBoxPreferences,
+                &QDialogButtonBox::accepted,
+                this,
+                &MainWindow::saveAppSettings);
         QPushButton *applyBtn = buttonBoxPreferences->button(QDialogButtonBox::Apply);
         if (applyBtn)
         {
@@ -1101,28 +1263,36 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     // Connect history table selection changes
-    connect(localHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
-            this, &MainWindow::updateLocalHistoryButtons);
-    connect(webHistoryTable->selectionModel(), &QItemSelectionModel::selectionChanged,
-            this, &MainWindow::updateWebHistoryButtons);
+    connect(localHistoryTable->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this,
+            &MainWindow::updateLocalHistoryButtons);
+    connect(webHistoryTable->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this,
+            &MainWindow::updateWebHistoryButtons);
 
     // Connect Terminal tab
     connect(runCommandBtn, &QPushButton::clicked, this, &MainWindow::onRunCommand);
     connect(clearTerminalBtn, &QPushButton::clicked, this, &MainWindow::onClearTerminal);
+    connect(stopCommandBtn, &QPushButton::clicked, this, &MainWindow::onStopCommand);
+    connect(commandInput, &QLineEdit::returnPressed, this, &MainWindow::onRunCommand);
 
     // Connect Package Manager tab
     connect(searchPackageBtn, &QPushButton::clicked, this, &MainWindow::onSearchPackage);
     connect(installPackageBtn, &QPushButton::clicked, this, &MainWindow::onInstallPackage);
     connect(uninstallPackageBtn, &QPushButton::clicked, this, &MainWindow::onUninstallPackage);
 
-    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int index)
-            {
-                if (mainTabs->widget(index)->objectName() == "tabPackageManager")
-                {
-                    refreshInstalledPackages();
-                }
-            });
-    connect(installedPackagesList, &QListWidget::doubleClicked, this, &MainWindow::onInstalledPackagesListDoubleClicked);
+    connect(mainTabs, &QTabWidget::currentChanged, this, [this](int index) {
+        if (mainTabs->widget(index)->objectName() == "tabPackageManager")
+        {
+            refreshInstalledPackages();
+        }
+    });
+    connect(installedPackagesList,
+            &QListWidget::doubleClicked,
+            this,
+            &MainWindow::onInstalledPackagesListDoubleClicked);
 
     // Refresh tables on startup
     refreshRecentMenus();
@@ -1137,9 +1307,7 @@ MainWindow::MainWindow(QWidget *parent)
 /****************************************************************
  * @brief Destructor for MainWindow.
  ***************************************************************/
-MainWindow::~MainWindow()
-{
-}
+MainWindow::~MainWindow() {}
 
 /****************************************************************
  * @brief Sets up the entire UI dynamically.
@@ -1213,7 +1381,10 @@ void MainWindow::setupUi()
 
     connect(localAddButton, &QPushButton::clicked, this, &MainWindow::on_localAddButton_clicked);
     connect(localEditButton, &QPushButton::clicked, this, &MainWindow::on_localEditButton_clicked);
-    connect(localDeleteButton, &QPushButton::clicked, this, &MainWindow::on_localDeleteButton_clicked);
+    connect(localDeleteButton,
+            &QPushButton::clicked,
+            this,
+            &MainWindow::on_localDeleteButton_clicked);
     connect(localUpButton, &QPushButton::clicked, this, &MainWindow::on_localUpButton_clicked);
     connect(localDownButton, &QPushButton::clicked, this, &MainWindow::on_localDownButton_clicked);
 
@@ -1252,10 +1423,14 @@ void MainWindow::setupUi()
 
     QHBoxLayout *terminalCommandLayout = new QHBoxLayout();
     commandInput = new QLineEdit(tabTerminal);
-    runCommandBtn = new QPushButton(tr("Run Command"), tabTerminal);
+    commandInput->setPlaceholderText("Enter command...");
+    runCommandBtn = new QPushButton(tr("Run"), tabTerminal);
     clearTerminalBtn = new QPushButton(tr("Clear"), tabTerminal);
+    stopCommandBtn = new QPushButton(tr("Stop"), tabTerminal);
+    stopCommandBtn->setEnabled(false);
     terminalCommandLayout->addWidget(commandInput);
     terminalCommandLayout->addWidget(runCommandBtn);
+    terminalCommandLayout->addWidget(stopCommandBtn);
     terminalCommandLayout->addWidget(clearTerminalBtn);
     terminalLayout->addLayout(terminalCommandLayout);
 
@@ -1290,7 +1465,7 @@ void MainWindow::setupUi()
     tabCommands->setObjectName("tabCommands");
     QVBoxLayout *commandsLayout = new QVBoxLayout(tabCommands);
 
-    commandsTab = new CommandsTab(tabCommands);
+    commandsTab = new CommandsTab(terminalEngine, tabCommands);
     commandsLayout->addWidget(commandsTab);
 
     mainTabs->addTab(tabCommands, tr("Commands"));
@@ -1342,16 +1517,17 @@ void MainWindow::setupUi()
 
     settingsLayout->addLayout(formLayout);
 
+    // Buttons and button box
     saveSettingsButton = new QPushButton(tr("Save Settings"), tabSettings);
     settingsLayout->addWidget(saveSettingsButton);
 
     restoreDefaultsButton = new QPushButton(tr("Restore Defaults"), tabSettings);
     settingsLayout->addWidget(restoreDefaultsButton);
 
-    buttonBoxPreferences = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Apply | QDialogButtonBox::Cancel,
-        tabSettings
-        );
+    // Create the button box BEFORE connecting any signals
+    buttonBoxPreferences = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Apply
+                                                    | QDialogButtonBox::Cancel,
+                                                tabSettings);
     settingsLayout->addWidget(buttonBoxPreferences);
 
     mainTabs->addTab(tabSettings, tr("Settings"));
@@ -1364,15 +1540,19 @@ void MainWindow::setupUi()
     menuFile = new QMenu(tr("&File"), this);
     menuBar->addMenu(menuFile);
 
-    actionOpenRequirements = new QAction(QIcon(":/icons/icons/open.svg"), tr("Open requirements file..."), this);
+    actionOpenRequirements = new QAction(QIcon(":/icons/icons/open.svg"),
+                                         tr("Open requirements file..."),
+                                         this);
     menuFile->addAction(actionOpenRequirements);
 
-    actionFetchRequirements = new QAction(QIcon(":/icons/icons/url.svg"), tr("Fetch requirements from URL..."), this);
+    actionFetchRequirements = new QAction(QIcon(":/icons/icons/url.svg"),
+                                          tr("Fetch requirements from URL..."),
+                                          this);
     menuFile->addAction(actionFetchRequirements);
 
     menuFile->addSeparator();
 
-    // Recent Local and Recent Web submenus
+    // Recent menus (created here, populated later)
     recentLocalMenu = new QMenu(tr("Recent Local"), this);
     menuFile->addMenu(recentLocalMenu);
 
@@ -1388,10 +1568,12 @@ void MainWindow::setupUi()
     menuTools = new QMenu(tr("&Tools"), this);
     menuBar->addMenu(menuTools);
 
-    actionCreateVenv = new QAction(QIcon(":/icons/icons/venv.svg"), tr("Create/Update venv"), this);
+    actionCreateVenv = new QAction(QIcon(":/icons/icons/venv.svg"), tr("Create venv"), this);
     menuTools->addAction(actionCreateVenv);
 
-    actionResolveMatrix = new QAction(QIcon(":/icons/icons/resolve.svg"), tr("Resolve matrix"), this);
+    actionResolveMatrix = new QAction(QIcon(":/icons/icons/resolve.svg"),
+                                      tr("Resolve matrix"),
+                                      this);
     menuTools->addAction(actionResolveMatrix);
 
     actionPause = new QAction(QIcon(":/icons/icons/pause.svg"), tr("Pause"), this);
@@ -1438,6 +1620,65 @@ void MainWindow::setupUi()
     // === STATUS BAR ===
     statusBar = new QStatusBar(this);
     setStatusBar(statusBar);
+
+    // === Terminal Engine wiring and Terminal tab gating ===
+    terminalEngine = new TerminalEngine(this);
+
+    // Connect TerminalEngine signals
+    connect(terminalEngine, &TerminalEngine::outputReceived, this, &MainWindow::onTerminalOutput);
+    connect(terminalEngine,
+            &TerminalEngine::commandStarted,
+            this,
+            &MainWindow::onTerminalCommandStarted);
+    connect(terminalEngine,
+            &TerminalEngine::commandFinished,
+            this,
+            &MainWindow::onTerminalCommandFinished);
+    connect(terminalEngine, &TerminalEngine::venvProgress, this, &MainWindow::onVenvProgress);
+
+    // Settings tab connections (safe order)
+    connect(saveSettingsButton, &QPushButton::clicked, this, &MainWindow::onSaveSettings);
+    connect(restoreDefaultsButton, &QPushButton::clicked, this, &MainWindow::onRestoreDefaults);
+    connect(buttonBoxPreferences, &QDialogButtonBox::accepted, this, &MainWindow::saveAppSettings);
+    if (QPushButton *applyBtn = buttonBoxPreferences->button(QDialogButtonBox::Apply))
+    {
+        connect(applyBtn, &QPushButton::clicked, this, &MainWindow::onApplySettings);
+    }
+
+    // After creating terminalEngine and before venv checks:
+    QString versionFromSettings = pythonVersionEdit->text().trimmed();
+    terminalEngine->setPythonCommand(versionFromSettings);
+
+    // Default venv path to project-local ".venv"
+    terminalEngine->setVenvPath(QDir::currentPath() + "/.venv");
+
+    // Disable Terminal tab at startup until venv is available and activated
+    int terminalTabIndex = mainTabs->indexOf(tabTerminal);
+    if (terminalTabIndex >= 0)
+    {
+        mainTabs->setTabEnabled(terminalTabIndex, false);
+    }
+
+    // Attempt to enable if venv exists and activation succeeds
+    if (terminalEngine->venvExists())
+    {
+        if (terminalEngine->activateVenv())
+        {
+            if (terminalTabIndex >= 0)
+            {
+                mainTabs->setTabEnabled(terminalTabIndex, true);
+            }
+            statusBar->showMessage(tr("Virtual environment detected and activated"), 3000);
+        }
+        else
+        {
+            statusBar->showMessage(tr("Virtual environment present but activation failed"), 3000);
+        }
+    }
+    else
+    {
+        statusBar->showMessage(tr("No virtual environment found. Use Tools → Create venv."), 4000);
+    }
 }
 
 /****************************************************************
@@ -1453,7 +1694,10 @@ void MainWindow::exitApp()
  ***************************************************************/
 void MainWindow::openLocalRequirements()
 {
-    QString path = QFileDialog::getOpenFileName(this, tr("Open requirements.txt"), QString(), tr("Text Files (*.txt)"));
+    QString path = QFileDialog::getOpenFileName(this,
+                                                tr("Open requirements.txt"),
+                                                QString(),
+                                                tr("Text Files (*.txt)"));
     if (path.isEmpty())
     {
         return;
@@ -1467,14 +1711,12 @@ void MainWindow::openLocalRequirements()
 void MainWindow::fetchRequirementsFromUrl()
 {
     bool ok = false;
-    QString inputUrl = QInputDialog::getText(
-        this,
-        tr("Fetch requirements"),
-        tr("Enter URL:"),
-        QLineEdit::Normal,
-        "",
-        &ok
-        );
+    QString inputUrl = QInputDialog::getText(this,
+                                             tr("Fetch requirements"),
+                                             tr("Enter URL:"),
+                                             QLineEdit::Normal,
+                                             "",
+                                             &ok);
     if (!ok || inputUrl.isEmpty())
     {
         return;
@@ -1504,11 +1746,9 @@ void MainWindow::loadRequirementsFromFile(const QString &path)
     QStringList errors;
     if (!validateRequirementsWithErrors(lines, errors))
     {
-        QMessageBox::warning(
-            this,
-            tr("Invalid requirements.txt"),
-            tr("Validation failed:\n%1").arg(errors.join("\n"))
-            );
+        QMessageBox::warning(this,
+                             tr("Invalid requirements.txt"),
+                             tr("Validation failed:\n%1").arg(errors.join("\n")));
         return;
     }
     if (requirementsModel)
@@ -1543,7 +1783,9 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     QByteArray content;
     if (!downloadText(url, content))
     {
-        QMessageBox::warning(this, tr("Download failed"), tr("Failed to fetch requirements from URL:\n%1").arg(url));
+        QMessageBox::warning(this,
+                             tr("Download failed"),
+                             tr("Failed to fetch requirements from URL:\n%1").arg(url));
         historyRecentWeb.removeAll(url);
         refreshRecentMenus();
         saveHistory();
@@ -1553,7 +1795,9 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     QStringList errors;
     if (!validateRequirementsWithErrors(lines, errors))
     {
-        QMessageBox::warning(this, tr("Invalid requirements.txt"), tr("Fetched content failed validation:\n%1").arg(errors.join("\n")));
+        QMessageBox::warning(this,
+                             tr("Invalid requirements.txt"),
+                             tr("Fetched content failed validation:\n%1").arg(errors.join("\n")));
         return;
     }
     if (requirementsModel)
@@ -1573,9 +1817,8 @@ void MainWindow::loadRequirementsFromUrl(const QString &url)
     }
     refreshRecentMenus();
     saveHistory();
-    appendLog(tr("Fetched %1 requirements from URL: %2")
-                  .arg(requirementsModel->rowCount())
-                  .arg(url));
+    appendLog(
+        tr("Fetched %1 requirements from URL: %2").arg(requirementsModel->rowCount()).arg(url));
 }
 
 /****************************************************************
@@ -1592,7 +1835,7 @@ void MainWindow::refreshHistoryTables()
     localHistoryModel->setHorizontalHeaderLabels({tr("Recent Local Files")});
     for (const QString &path : std::as_const(localList))
     {
-        QList<QStandardItem*> row;
+        QList<QStandardItem *> row;
         row << new QStandardItem(path);
         localHistoryModel->appendRow(row);
     }
@@ -1602,7 +1845,7 @@ void MainWindow::refreshHistoryTables()
     webHistoryModel->setHorizontalHeaderLabels({tr("Recent Web URLs")});
     for (const QString &url : std::as_const(webList))
     {
-        QList<QStandardItem*> row;
+        QList<QStandardItem *> row;
         row << new QStandardItem(url);
         webHistoryModel->appendRow(row);
     }
@@ -1629,21 +1872,17 @@ void MainWindow::refreshRecentMenus()
     {
         const QString &path = historyRecentLocal.at(i);
         QAction *act = recentLocalMenu->addAction(path);
-        connect(act, &QAction::triggered, this, [this, path]()
-                {
-                    loadRequirementsFromFile(path);
-                });
+        connect(act, &QAction::triggered, this, [this, path]() { loadRequirementsFromFile(path); });
     }
     if (!historyRecentLocal.isEmpty())
     {
         recentLocalMenu->addSeparator();
         QAction *clearLocal = recentLocalMenu->addAction(tr("Clear Local History"));
-        connect(clearLocal, &QAction::triggered, this, [this]()
-                {
-                    historyRecentLocal.clear();
-                    refreshRecentMenus();
-                    saveHistory();
-                });
+        connect(clearLocal, &QAction::triggered, this, [this]() {
+            historyRecentLocal.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
     }
 
     // Populate Recent Web
@@ -1651,21 +1890,17 @@ void MainWindow::refreshRecentMenus()
     {
         const QString &url = historyRecentWeb.at(i);
         QAction *act = recentWebMenu->addAction(url);
-        connect(act, &QAction::triggered, this, [this, url]()
-                {
-                    loadRequirementsFromUrl(url);
-                });
+        connect(act, &QAction::triggered, this, [this, url]() { loadRequirementsFromUrl(url); });
     }
     if (!historyRecentWeb.isEmpty())
     {
         recentWebMenu->addSeparator();
         QAction *clearWeb = recentWebMenu->addAction(tr("Clear Web History"));
-        connect(clearWeb, &QAction::triggered, this, [this]()
-                {
-                    historyRecentWeb.clear();
-                    refreshRecentMenus();
-                    saveHistory();
-                });
+        connect(clearWeb, &QAction::triggered, this, [this]() {
+            historyRecentWeb.clear();
+            refreshRecentMenus();
+            saveHistory();
+        });
     }
 }
 
@@ -1682,39 +1917,125 @@ void MainWindow::clearAllHistory()
 }
 
 /****************************************************************
- * @brief Loads application settings from QSettings to UI.
+ * @brief Loads persisted application + Settings values at startup.
  ***************************************************************/
 void MainWindow::loadAppSettings()
 {
     QSettings settings;
-    maxHistoryItems = settings.value("app/maxItems", 10).toInt();
+
+    // Load values with defaults
+    QString pythonVer = settings.value("PythonVersion", DEFAULT_PYTHON_VERSION).toString();
+    QString pipVer = settings.value("PipVersion", DEFAULT_PIP_VERSION).toString();
+    QString pipToolsVer = settings.value("PipToolsVersion", DEFAULT_PIPTOOLS_VERSION).toString();
+    int maxItems = settings.value("app/maxItems", DEFAULT_MAX_ITEMS).toInt();
+
+    // Update internal state
+    maxHistoryItems = maxItems;
+
+    // Update UI fields
+    pythonVersionEdit->setText(pythonVer);
+    pipVersionEdit->setText(pipVer);
+    pipToolsVersionEdit->setText(pipToolsVer);
+    spinMaxItems->setValue(maxItems);
+
+    // Apply Python command immediately
+    terminalEngine->setPythonCommand(pythonVer);
+
+    // Validate and sync UI
     validateAppSettings();
     updateUiFromSettings();
 }
 
 /****************************************************************
- * @brief Saves application settings from UI to QSettings.
+ * @brief Save Settings button handler.
+ ***************************************************************/
+void MainWindow::onSaveSettings()
+{
+    QString pythonVer = pythonVersionEdit->text().trimmed();
+    QString pipVer = pipVersionEdit->text().trimmed();
+    QString pipToolsVer = pipToolsVersionEdit->text().trimmed();
+    int maxItems = spinMaxItems->value();
+
+    terminalEngine->setPythonCommand(pythonVer);
+
+    QSettings settings;
+    settings.setValue("PythonVersion", pythonVer);
+    settings.setValue("PipVersion", pipVer);
+    settings.setValue("PipToolsVersion", pipToolsVer);
+    settings.setValue("app/maxItems", maxItems);
+    settings.sync();
+
+    statusBar->showMessage(tr("Settings saved. Python command updated to: %1")
+                               .arg(terminalEngine->pythonCommand()),
+                           4000);
+}
+
+/****************************************************************
+ * @brief Apply Settings button handler.
+ ***************************************************************/
+void MainWindow::onApplySettings()
+{
+    QString pythonVer = pythonVersionEdit->text().trimmed();
+    terminalEngine->setPythonCommand(pythonVer);
+
+    statusBar->showMessage(tr("Settings applied. Python command updated to: %1")
+                               .arg(terminalEngine->pythonCommand()),
+                           4000);
+}
+
+/****************************************************************
+ * @brief Restore Defaults button handler.
+ ***************************************************************/
+void MainWindow::onRestoreDefaults()
+{
+    // Reset UI fields using constants
+    pythonVersionEdit->setText(DEFAULT_PYTHON_VERSION);
+    pipVersionEdit->setText(DEFAULT_PIP_VERSION);
+    pipToolsVersionEdit->setText(DEFAULT_PIPTOOLS_VERSION);
+    spinMaxItems->setValue(DEFAULT_MAX_ITEMS);
+    useCpuCheckBox->setChecked(false);
+    cudaCheckBox->setChecked(false);
+
+    // Update runtime Python command using default
+    terminalEngine->setPythonCommand(DEFAULT_PYTHON_VERSION);
+
+    // Persist defaults
+    QSettings settings;
+    settings.setValue("PythonVersion", DEFAULT_PYTHON_VERSION);
+    settings.setValue("PipVersion", DEFAULT_PIP_VERSION);
+    settings.setValue("PipToolsVersion", DEFAULT_PIPTOOLS_VERSION);
+    settings.setValue("app/maxItems", DEFAULT_MAX_ITEMS);
+    settings.setValue("AppVersion", DEFAULT_APP_VERSION);
+    settings.sync();
+
+    statusBar->showMessage(tr("Defaults restored. Python command set to: %1")
+                               .arg(terminalEngine->pythonCommand()),
+                           4000);
+}
+
+/****************************************************************
+ * @brief Save Settings when dialog accepted (OK).
  ***************************************************************/
 void MainWindow::saveAppSettings()
 {
-    applySettingsFromUi();
-    validateAppSettings();
+    QString pythonVer = pythonVersionEdit->text().trimmed();
+    QString pipVer = pipVersionEdit->text().trimmed();
+    QString pipToolsVer = pipToolsVersionEdit->text().trimmed();
+    int maxItems = spinMaxItems->value();
+
+    terminalEngine->setPythonCommand(pythonVer);
+
     QSettings settings;
-    settings.setValue("app/maxItems", maxHistoryItems);
-    statusBar->showMessage(tr("Settings saved"), 2000);
-    if (maxHistoryItems != -1)
-    {
-        while (historyRecentLocal.size() > maxHistoryItems)
-        {
-            historyRecentLocal.removeLast();
-        }
-        while (historyRecentWeb.size() > maxHistoryItems)
-        {
-            historyRecentWeb.removeLast();
-        }
-    }
-    refreshRecentMenus();
-    saveHistory();
+    settings.setValue("PythonVersion", pythonVer);
+    settings.setValue("PipVersion", pipVer);
+    settings.setValue("PipToolsVersion", pipToolsVer);
+    settings.setValue("app/maxItems", maxItems);
+    settings.setValue("AppVersion", DEFAULT_APP_VERSION);
+    settings.sync();
+
+    statusBar->showMessage(tr("Application settings saved. Python command updated to: %1")
+                               .arg(terminalEngine->pythonCommand()),
+                           4000);
 }
 
 /****************************************************************
@@ -1753,7 +2074,10 @@ void MainWindow::updateUiFromSettings()
  ***************************************************************/
 void MainWindow::writeTableToModel(const QStringList &lines)
 {
-    if (!requirementsModel || !requirementsView) { return; }
+    if (!requirementsModel || !requirementsView)
+    {
+        return;
+    }
     requirementsModel->clear();
     requirementsModel->setColumnCount(1);
     requirementsModel->setHorizontalHeaderLabels({tr("requirements.txt")});
@@ -1828,13 +2152,11 @@ void MainWindow::showCompiledResult(const QString &path)
  ***************************************************************/
 void MainWindow::showAboutBox()
 {
-    QMessageBox::about(this,
-                       tr("About Pip Matrix Resolver"),
-                       tr("<b>Pip Matrix Resolver</b><br>"
-                          "Cross-platform Qt tool to resolve "
-                          "Python dependency matrices.<br>"
-                          "Version %1").arg(appVersion)
-                       );
+    QMessageBox::about(
+        this,
+        tr("About Pip Matrix Resolver"),
+        tr("<b>Pip Matrix Resolver</b><br>" "Cross-platform Qt tool to resolve " "Python dependency matrices.<br>" "Version %1")
+            .arg(appVersion));
 }
 
 /****************************************************************
@@ -2031,7 +2353,12 @@ void MainWindow::stopResolve()
 void MainWindow::on_localAddButton_clicked()
 {
     bool ok;
-    QString path = QInputDialog::getText(this, tr("Add Local File"), tr("File path:"), QLineEdit::Normal, "", &ok);
+    QString path = QInputDialog::getText(this,
+                                         tr("Add Local File"),
+                                         tr("File path:"),
+                                         QLineEdit::Normal,
+                                         "",
+                                         &ok);
     if (ok && !path.isEmpty())
     {
         QSettings s(kOrganizationName, kApplicationName);
@@ -2048,14 +2375,22 @@ void MainWindow::on_localAddButton_clicked()
 void MainWindow::on_localEditButton_clicked()
 {
     QModelIndex idx = localHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
     QString oldValue = list.at(idx.row());
     bool ok;
-    QString newValue = QInputDialog::getText(this, tr("Edit Local File"), tr("File path:"), QLineEdit::Normal, oldValue, &ok);
-    if (!ok) return; // User cancelled, do nothing
-    if (newValue.isEmpty()) return; // Optionally, do nothing if empty
+    QString newValue = QInputDialog::getText(this,
+                                             tr("Edit Local File"),
+                                             tr("File path:"),
+                                             QLineEdit::Normal,
+                                             oldValue,
+                                             &ok);
+    if (!ok)
+        return; // User cancelled, do nothing
+    if (newValue.isEmpty())
+        return; // Optionally, do nothing if empty
     list[idx.row()] = newValue;
     s.setValue("history/recentLocal", list);
     refreshHistoryTables();
@@ -2067,7 +2402,8 @@ void MainWindow::on_localEditButton_clicked()
 void MainWindow::on_localDeleteButton_clicked()
 {
     QModelIndex idx = localHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
     list.removeAt(idx.row());
@@ -2081,7 +2417,8 @@ void MainWindow::on_localDeleteButton_clicked()
 void MainWindow::on_localUpButton_clicked()
 {
     QModelIndex idx = localHistoryTable->currentIndex();
-    if (!idx.isValid() || idx.row() == 0) return;
+    if (!idx.isValid() || idx.row() == 0)
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
     list.swapItemsAt(idx.row(), idx.row() - 1);
@@ -2098,7 +2435,8 @@ void MainWindow::on_localDownButton_clicked()
     QModelIndex idx = localHistoryTable->currentIndex();
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentLocal").toStringList();
-    if (!idx.isValid() || idx.row() >= list.size() - 1) return;
+    if (!idx.isValid() || idx.row() >= list.size() - 1)
+        return;
     list.swapItemsAt(idx.row(), idx.row() + 1);
     s.setValue("history/recentLocal", list);
     refreshHistoryTables();
@@ -2111,7 +2449,8 @@ void MainWindow::on_localDownButton_clicked()
 void MainWindow::on_webAddButton_clicked()
 {
     bool ok;
-    QString url = QInputDialog::getText(this, tr("Add Web URL"), tr("URL:"), QLineEdit::Normal, "", &ok);
+    QString url
+        = QInputDialog::getText(this, tr("Add Web URL"), tr("URL:"), QLineEdit::Normal, "", &ok);
     if (ok && !url.isEmpty())
     {
         QSettings s(kOrganizationName, kApplicationName);
@@ -2128,14 +2467,22 @@ void MainWindow::on_webAddButton_clicked()
 void MainWindow::on_webEditButton_clicked()
 {
     QModelIndex idx = webHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
     QString oldValue = list.at(idx.row());
     bool ok;
-    QString newValue = QInputDialog::getText(this, tr("Edit Web URL"), tr("URL:"), QLineEdit::Normal, oldValue, &ok);
-    if (!ok) return; // User cancelled, do nothing
-    if (newValue.isEmpty()) return; // Optionally, do nothing if empty
+    QString newValue = QInputDialog::getText(this,
+                                             tr("Edit Web URL"),
+                                             tr("URL:"),
+                                             QLineEdit::Normal,
+                                             oldValue,
+                                             &ok);
+    if (!ok)
+        return; // User cancelled, do nothing
+    if (newValue.isEmpty())
+        return; // Optionally, do nothing if empty
     list[idx.row()] = newValue;
     s.setValue("history/recentWeb", list);
     refreshHistoryTables();
@@ -2147,7 +2494,8 @@ void MainWindow::on_webEditButton_clicked()
 void MainWindow::on_webDeleteButton_clicked()
 {
     QModelIndex idx = webHistoryTable->currentIndex();
-    if (!idx.isValid()) return;
+    if (!idx.isValid())
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
     list.removeAt(idx.row());
@@ -2161,7 +2509,8 @@ void MainWindow::on_webDeleteButton_clicked()
 void MainWindow::on_webUpButton_clicked()
 {
     QModelIndex idx = webHistoryTable->currentIndex();
-    if (!idx.isValid() || idx.row() == 0) return;
+    if (!idx.isValid() || idx.row() == 0)
+        return;
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
     list.swapItemsAt(idx.row(), idx.row() - 1);
@@ -2178,7 +2527,8 @@ void MainWindow::on_webDownButton_clicked()
     QModelIndex idx = webHistoryTable->currentIndex();
     QSettings s(kOrganizationName, kApplicationName);
     QStringList list = s.value("history/recentWeb").toStringList();
-    if (!idx.isValid() || idx.row() >= list.size() - 1) return;
+    if (!idx.isValid() || idx.row() >= list.size() - 1)
+        return;
     list.swapItemsAt(idx.row(), idx.row() + 1);
     s.setValue("history/recentWeb", list);
     refreshHistoryTables();
@@ -2287,7 +2637,8 @@ void MainWindow::checkAndRestoreSettings()
     pipVersionEdit->setText(pipVersion);
 
     // pip-tools version
-    QString pipToolsVersion = s.value("settings/pipToolsVersion", DEFAULT_PIPTOOLS_VERSION).toString();
+    QString pipToolsVersion = s.value("settings/pipToolsVersion", DEFAULT_PIPTOOLS_VERSION)
+                                  .toString();
     if (pipToolsVersion.isEmpty())
     {
         pipToolsVersion = DEFAULT_PIPTOOLS_VERSION;
@@ -2339,8 +2690,10 @@ void MainWindow::detectSystem()
         while (!f.atEnd())
         {
             QString line = f.readLine();
-            if (line.startsWith("ID=")) release = line.mid(3).trimmed().replace("\"", "");
-            if (line.startsWith("VERSION_ID=")) version = line.mid(11).trimmed().replace("\"", "");
+            if (line.startsWith("ID="))
+                release = line.mid(3).trimmed().replace("\"", "");
+            if (line.startsWith("VERSION_ID="))
+                version = line.mid(11).trimmed().replace("\"", "");
         }
     }
 #endif
@@ -2353,19 +2706,22 @@ void MainWindow::detectSystem()
     proc.start("wmic path win32_VideoController get name");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+    if (output.contains("NVIDIA", Qt::CaseInsensitive))
+        gpuDetected = true;
 #elif defined(Q_OS_LINUX)
     QProcess proc;
     proc.start("lspci");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+    if (output.contains("NVIDIA", Qt::CaseInsensitive))
+        gpuDetected = true;
 #elif defined(Q_OS_MAC)
     QProcess proc;
     proc.start("system_profiler SPDisplaysDataType");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
-    if (output.contains("NVIDIA", Qt::CaseInsensitive)) gpuDetected = true;
+    if (output.contains("NVIDIA", Qt::CaseInsensitive))
+        gpuDetected = true;
 #endif
     if (!gpuDetected)
     {
@@ -2394,20 +2750,191 @@ void MainWindow::detectSystem()
  ***************************************************************/
 void MainWindow::onCreateVenv()
 {
-    // Check if python, pip, or pip-tools settings have changed
-    // If so, rebuild venv_running
-    // (You can compare current settings to those saved in QSettings)
+    // Get Python version from settings
+    QString pythonVersion = pythonVersionEdit->text().trimmed();
+    if (pythonVersion.isEmpty())
+    {
+        pythonVersion = DEFAULT_PYTHON_VERSION;
+    }
 
-    // Call your bash script using QProcess
-    QProcess proc;
-    QString script = "/path/to/pip-matrix-common.sh";
-    QStringList args;
-    args << "--create-venv-running"; // You can define this flag in your script
-    proc.start(script, args);
-    proc.waitForFinished(-1);
-    QString output = proc.readAllStandardOutput();
-    statusBar->showMessage(tr("Switching to Terminal tab. Created/Updated venv_running: %1").arg(output));
+    // Get pip and pip-tools versions (currently informational)
+    QString pipVersion = pipVersionEdit->text().trimmed();
+    QString pipToolsVersion = pipToolsVersionEdit->text().trimmed();
+    Q_UNUSED(pipVersion);
+    Q_UNUSED(pipToolsVersion);
+
+    // Set venv path
+    QString venvPath = QDir::currentPath() + "/.venv";
+    terminalEngine->setVenvPath(venvPath);
+
+    // Switch to terminal tab
     mainTabs->setCurrentWidget(tabTerminal);
+
+    // Clear terminal and show progress
+    terminalOutput->clear();
+    appendTerminalOutput("=== Creating Virtual Environment ===", false);
+    appendTerminalOutput(QString("Python version: %1").arg(pythonVersion), false);
+    appendTerminalOutput(QString("Virtual environment path: %1").arg(venvPath), false);
+    appendTerminalOutput("", false);
+
+    // UI state during creation
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    runCommandBtn->setEnabled(false);
+    stopCommandBtn->setEnabled(false);
+
+    bool success = terminalEngine->createVirtualEnvironment(pythonVersion);
+
+    runCommandBtn->setEnabled(true);
+    stopCommandBtn->setEnabled(false);
+    QApplication::restoreOverrideCursor();
+
+    int terminalTabIndex = mainTabs->indexOf(tabTerminal);
+
+    if (success)
+    {
+        appendTerminalOutput("", false);
+        appendTerminalOutput("=== Virtual Environment Ready ===", false);
+        appendTerminalOutput("You can now run Python commands, pip, and pip-tools", false);
+
+        // Try to activate and enable Terminal tab
+        if (terminalEngine->activateVenv())
+        {
+            if (terminalTabIndex >= 0)
+            {
+                mainTabs->setTabEnabled(terminalTabIndex, true);
+            }
+            statusBar->showMessage(tr("Virtual environment created and activated"), 5000);
+        }
+        else
+        {
+            statusBar->showMessage(tr("Virtual environment created, but activation failed"), 5000);
+        }
+    }
+    else
+    {
+        appendTerminalOutput("", false);
+        appendTerminalOutput("=== Virtual Environment Creation Failed ===", true);
+        if (terminalTabIndex >= 0)
+        {
+            mainTabs->setTabEnabled(terminalTabIndex, false);
+        }
+        statusBar->showMessage(tr("Failed to create virtual environment"), 5000);
+    }
+}
+
+/****************************************************************
+ * @brief on Run Command.
+ ***************************************************************/
+void MainWindow::onRunCommand()
+{
+    QString command = commandInput->text().trimmed();
+    if (command.isEmpty())
+    {
+        return;
+    }
+
+    // Clear input
+    commandInput->clear();
+
+    // Execute command
+    terminalEngine->executeCommand(command);
+}
+
+/****************************************************************
+ * @brief on Clear Terminal.
+ ***************************************************************/
+void MainWindow::onClearTerminal()
+{
+    terminalOutput->clear();
+}
+
+/****************************************************************
+ * @brief on Stop Command.
+ ***************************************************************/
+void MainWindow::onStopCommand()
+{
+    terminalEngine->stopCurrentProcess();
+}
+
+/****************************************************************
+ * @brief Handles terminal output from TerminalEngine.
+ ***************************************************************/
+void MainWindow::onTerminalOutput(const QString &output, bool isError)
+{
+    appendTerminalOutput(output, isError);
+}
+
+/****************************************************************
+ * @brief Handles terminal command started event.
+ ***************************************************************/
+void MainWindow::onTerminalCommandStarted(const QString &command)
+{
+    runCommandBtn->setEnabled(false);
+    stopCommandBtn->setEnabled(true);
+    statusBar->showMessage(QString("Executing: %1").arg(command));
+}
+
+/****************************************************************
+ * @brief Handles terminal command finished event.
+ ***************************************************************/
+void MainWindow::onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    runCommandBtn->setEnabled(true);
+    stopCommandBtn->setEnabled(false);
+
+    if (exitStatus == QProcess::NormalExit && exitCode == 0)
+    {
+        statusBar->showMessage(tr("Command completed successfully"), 3000);
+    }
+    else
+    {
+        statusBar->showMessage(tr("Command failed"), 3000);
+    }
+}
+
+/****************************************************************
+ * @brief Handles venv progress messages.
+ ***************************************************************/
+void MainWindow::onVenvProgress(const QString &message)
+{
+    appendTerminalOutput(message, false);
+    QApplication::processEvents(); // Update UI
+}
+
+/****************************************************************
+ * @brief Helper to append text to terminal output with color.
+ ***************************************************************/
+void MainWindow::appendTerminalOutput(const QString &text, bool isError)
+{
+    if (text.isEmpty())
+    {
+        terminalOutput->appendPlainText("");
+        return;
+    }
+
+    QTextCursor cursor = terminalOutput->textCursor();
+    cursor.movePosition(QTextCursor::End);
+
+    QTextCharFormat format;
+    if (isError)
+    {
+        format.setForeground(QColor(Qt::red));
+    }
+    else if (text.startsWith("===") || text.startsWith("$"))
+    {
+        format.setForeground(QColor(Qt::blue));
+        format.setFontWeight(QFont::Bold);
+    }
+    else
+    {
+        format.setForeground(QColor(Qt::black));
+    }
+
+    cursor.setCharFormat(format);
+    cursor.insertText(text + "\n");
+
+    terminalOutput->setTextCursor(cursor);
+    terminalOutput->ensureCursorVisible();
 }
 
 /****************************************************************
@@ -2429,7 +2956,10 @@ void MainWindow::setupVenvPaths()
 bool MainWindow::detectGpuViaPowerShell()
 {
     QProcess proc;
-    proc.start("powershell", QStringList() << "-Command" << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
+    proc.start(
+        "powershell",
+        QStringList() << "-Command"
+                      << "Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name");
     proc.waitForFinished();
     QString output = proc.readAllStandardOutput();
     return output.contains("NVIDIA", Qt::CaseInsensitive);
@@ -2472,95 +3002,16 @@ bool MainWindow::detectGpuViaNvidiaSmi()
 bool MainWindow::detectNvidiaGpu()
 {
     // Primary test: PowerShell WMI
-    if (detectGpuViaPowerShell()) return true;
+    if (detectGpuViaPowerShell())
+        return true;
     // Fallback 1: dxdiag
-    if (detectGpuViaDxDiag()) return true;
+    if (detectGpuViaDxDiag())
+        return true;
     // Fallback 2: nvidia-smi
-    if (detectGpuViaNvidiaSmi()) return true;
+    if (detectGpuViaNvidiaSmi())
+        return true;
     // Not detected
     return false;
-}
-
-/****************************************************************
- * @brief on Run Command.
- ***************************************************************/
-void MainWindow::onRunCommand()
-{
-    QString command = commandInput->text().trimmed();
-    if (command.isEmpty())
-    {
-        terminalOutput->appendPlainText("No command entered.");
-        return;
-    }
-
-    QProcess process;
-    QString venvPython;
-#if defined(Q_OS_WIN)
-    venvPython = QDir::current().filePath("venv_running/Scripts/python.exe");
-#else
-    venvPython = QDir::current().filePath("venv_running/bin/python");
-#endif
-
-    QStringList args;
-    bool usedVenv = false;
-
-    if (command.startsWith("pip "))
-    {
-        args << "-m" << "pip";
-        args << command.mid(4).split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else if (command.startsWith("pip-compile"))
-    {
-        args << "-m" << "piptools" << "compile";
-        QString rest = command.mid(QString("pip-compile").length()).trimmed();
-        if (!rest.isEmpty()) args << rest.split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else if (command.startsWith("pip-sync"))
-    {
-        args << "-m" << "piptools" << "sync";
-        QString rest = command.mid(QString("pip-sync").length()).trimmed();
-        if (!rest.isEmpty()) args << rest.split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else if (command.startsWith("python "))
-    {
-        args = command.mid(7).split(' ');
-        process.start(venvPython, args);
-        usedVenv = true;
-    }
-    else
-    {
-#if defined(Q_OS_WIN)
-        process.start("cmd.exe", QStringList() << "/C" << command);
-#else
-        process.start("bash", QStringList() << "-c" << command);
-#endif
-    }
-
-    process.waitForFinished();
-    QString output = process.readAllStandardOutput();
-    QString error = process.readAllStandardError();
-
-    if (usedVenv)
-        terminalOutput->appendPlainText("[venv] " + command);
-
-    if (!output.isEmpty())
-        terminalOutput->appendPlainText(output);
-    if (!error.isEmpty())
-        terminalOutput->appendPlainText("[ERROR] " + error);
-}
-
-/****************************************************************
- * @brief on Clear Terminal.
- ***************************************************************/
-void MainWindow::onClearTerminal()
-{
-    terminalOutput->clear();
 }
 
 /****************************************************************
@@ -2585,11 +3036,22 @@ void MainWindow::onSearchPackage()
     process.start(venvPython, args);
     process.waitForFinished();
     QString output = process.readAllStandardOutput();
-    QString error = process.readAllStandardError();
-    if (!output.isEmpty())
-        packageOutput->appendPlainText(output);
-    if (!error.isEmpty())
-        packageOutput->appendPlainText("[ERROR] " + error);
+    QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        installedPackagesList->addItem(lines.at(i));
+    }
+}
+
+/****************************************************************
+ * @brief Handles double-click on installed package list item.
+ * @param index The model index of the double-clicked item.
+ ***************************************************************/
+void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
+{
+    QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
+    packageNameInput->setText(pkg);
+    onUninstallPackage();
 }
 
 /****************************************************************
@@ -2675,14 +3137,31 @@ void MainWindow::refreshInstalledPackages()
 }
 
 /****************************************************************
- * @brief Handles double-click on installed package list item.
- * @param index The model index of the double-clicked item.
+ * @brief Handles immediate UI update when Python version changes.
+ * @param newVersion The new Python version string (e.g., "3.11").
  ***************************************************************/
-void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
+void MainWindow::onPythonVersionChanged(const QString &newVersion)
 {
-    QString pkg = installedPackagesList->item(index.row())->text().split('=')[0];
-    packageNameInput->setText(pkg);
-    onUninstallPackage();
+    // Update the Settings field immediately
+    if (pythonVersionEdit)
+        pythonVersionEdit->setText(newVersion);
+
+    // Reload other settings for consistency
+    loadAppSettings();
+
+    DEBUG_MSG() << "[DEBUG] UI updated to Python version:" << newVersion;
+}
+
+/****************************************************************
+ * @brief Refreshes the Python version displayed in the Settings UI.
+ ***************************************************************/
+void MainWindow::refreshPythonVersionUI()
+{
+    QSettings settings;
+    QString currentVersion = settings.value("PythonVersion", "3.10").toString();
+
+    if (pythonVersionEdit)
+        pythonVersionEdit->setText(currentVersion);
 }
 
 /************** End of MainWindow.cpp ***************************/
@@ -2740,6 +3219,7 @@ void MainWindow::onInstalledPackagesListDoubleClicked(const QModelIndex &index)
 #include <QSpinBox>
 #include <QListWidget>
 #include "CommandsTab.h"
+#include "TerminalEngine.h"
 
 /****************************************************************
  * @class MainWindow
@@ -2763,8 +3243,11 @@ private slots:
     void fetchRequirementsFromUrl();
     void refreshRecentMenus();
     void clearAllHistory();
-    void loadAppSettings();
+    void onSaveSettings();
+    void onApplySettings();
+    void onRestoreDefaults();
     void saveAppSettings();
+    void loadAppSettings();
     void validateAppSettings();
     void applySettingsFromUi();
     void updateUiFromSettings();
@@ -2800,6 +3283,7 @@ private slots:
 
     void onRunCommand();
     void onClearTerminal();
+    void onStopCommand();
 
     // Package Manager tab
     void onSearchPackage();
@@ -2808,6 +3292,15 @@ private slots:
 
     void refreshInstalledPackages();
     void onInstalledPackagesListDoubleClicked(const QModelIndex &index);
+
+    // Terminal engine slots
+    void onTerminalOutput(const QString &output, bool isError);
+    void onTerminalCommandStarted(const QString &command);
+    void onTerminalCommandFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void onVenvProgress(const QString &message);
+    //void onVenvStatusChanged(bool active);
+
+    void onPythonVersionChanged(const QString &newVersion);
 
 private:
     void setupUi();
@@ -2845,6 +3338,8 @@ private:
     QString normalizeRawUrl(const QString &inputUrl);
     bool downloadText(const QString &url, QByteArray &out);
     QString logsDir();
+    void appendTerminalOutput(const QString &text, bool isError);
+    void refreshPythonVersionUI();
 
     // History data
     QStringList historyRecentLocal;
@@ -2862,10 +3357,6 @@ private:
     QMenu *menuTools;
     QMenu *menuBatch;
     QMenu *menuHelp;
-
-    // Tab: Commands
-    QWidget *tabCommands;
-    CommandsTab *commandsTab;
 
     // Actions
     QAction *actionOpenRequirements;
@@ -2913,6 +3404,7 @@ private:
     QLineEdit *commandInput;
     QPushButton *runCommandBtn;
     QPushButton *clearTerminalBtn;
+    QPushButton *stopCommandBtn;
 
     // Tab: Package Manager
     QWidget *tabPackageManager;
@@ -2922,6 +3414,10 @@ private:
     QPushButton *uninstallPackageBtn;
     QListWidget *installedPackagesList;
     QPlainTextEdit *packageOutput;
+
+    // Tab: Commands
+    QWidget *tabCommands;
+    CommandsTab *commandsTab;
 
     // Tab: Settings
     QWidget *tabSettings;
@@ -2946,8 +3442,12 @@ private:
     QString venvRunningPath;
     QString venvTestingPath;
 
+    // Terminal engine
+    TerminalEngine *terminalEngine;
+
     // Settings
     int maxHistoryItems; // -1=unlimited, 0 invalid, ≥1 valid
+
 };
 
 /************** End of MainWindow.h ****************************/
@@ -3530,15 +4030,1230 @@ private:
 </ui>
 
 #-------------------------------------------------------------------------------
+# File: src/Settings.cpp
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file Settings.cpp
+ * @brief Implements the Settings persistence and accessors.
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.6 [Increment]
+ * @date    2025-11-06 [Todays date]
+ * @section License Unlicensed, MIT, or any.
+ * @section DESCRIPTION
+ * This file implements the Settings class using QSettings for
+ * persistence. It ensures centralized defaults and onboarding
+ * parity for the Python interpreter command resolution.
+ ***************************************************************/
+#include "Settings.h"
+#include "Constants.h"
+#include <QSettings>
+
+Settings* Settings::instance()
+{
+    static Settings s;
+    return &s;
+}
+
+Settings::Settings()
+{
+    QSettings qset;
+    m_pythonInterpreter = qset.value(
+                                  QStringLiteral("PythonInterpreter"),
+                                  DEFAULT_PYTHON_INTERPRETER()
+                                  ).toString();
+}
+
+QString Settings::pythonInterpreter() const
+{
+    return m_pythonInterpreter;
+}
+
+QString Settings::defaultPythonInterpreter() const
+{
+    return DEFAULT_PYTHON_INTERPRETER();
+}
+
+void Settings::setPythonInterpreter(const QString& command)
+{
+    m_pythonInterpreter = command;
+    QSettings qset;
+    qset.setValue(QStringLiteral("PythonInterpreter"), command);
+}
+
+/************** End of Settings.cpp **************************/
+
+#-------------------------------------------------------------------------------
+# File: src/Settings.h
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file Settings.h
+ * @brief Settings API providing source of truth for configuration.
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.6 [Increment]
+ * @date    2025-11-06 [Todays date]
+ * @section License Unlicensed, MIT, or any.
+ * @section DESCRIPTION
+ * This file declares the Settings class that centralizes access
+ * to persistent configuration, including the Python interpreter
+ * command used at runtime and shown in onboarding UI.
+ ***************************************************************/
+#pragma once
+#include <QString>
+
+class QSettings;
+
+/****************************************************************
+ * @class Settings
+ * @brief Centralized configuration backed by QSettings.
+ ***************************************************************/
+class Settings
+{
+public:
+    /****************************************************************
+     * @brief Singleton accessor.
+     * @return Pointer to the Settings instance.
+     ***************************************************************/
+    static Settings* instance();
+
+    /****************************************************************
+     * @brief Returns the user-configured Python interpreter command.
+     * @return Configured Python interpreter command (name or path).
+     ***************************************************************/
+    QString pythonInterpreter() const;
+
+    /****************************************************************
+     * @brief Returns the project-wide default interpreter command.
+     * @return Default Python interpreter command (platform-aware).
+     ***************************************************************/
+    QString defaultPythonInterpreter() const;
+
+    /****************************************************************
+     * @brief Updates the interpreter command and persists the value.
+     * @param command Interpreter command (name or absolute path).
+     ***************************************************************/
+    void setPythonInterpreter(const QString& command);
+
+private:
+    /****************************************************************
+     * @brief Constructs Settings and loads persisted values.
+     ***************************************************************/
+    Settings();
+
+private:
+    QString m_pythonInterpreter;
+};
+
+/************** End of Settings.h **************************/
+
+#-------------------------------------------------------------------------------
+# File: src/TerminalEngine.cpp
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file TerminalEngine.cpp
+ * @brief Implements the TerminalEngine class for terminal operations.
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.8
+ * @date    2025-11-04
+ * @section License MIT
+ * @section DESCRIPTION
+ * This file contains the implementation of TerminalEngine class.
+ ***************************************************************/
+#include "TerminalEngine.h"
+#include <QFileInfo>
+#include <QDebug>
+#include <QCoreApplication>
+#include <QStandardPaths>
+#include <QMessageBox>
+#include <QDesktopServices>
+#include <QSettings>
+#include <QUrl>
+#include <QPushButton>
+#include <QProcess>
+#include "Settings.h"        // central source of truth
+#include "Config.h"
+
+#define SHOW_DEBUG 1
+
+// Static globals
+QString TerminalEngine::g_pythonExe;
+QStringList TerminalEngine::g_pythonBaseArgs;
+/****************************************************************
+ * @brief Constructor: Initializes the terminal engine.
+ ***************************************************************/
+TerminalEngine::TerminalEngine(QObject *parent) : QObject(parent), currentProcess(nullptr)
+{
+    venvPath = QDir::current().filePath(".venv");
+}
+
+/****************************************************************
+ * @brief Destructor: Cleans up resources.
+ ***************************************************************/
+TerminalEngine::~TerminalEngine()
+{
+    if (currentProcess)
+    {
+        if (currentProcess->state() != QProcess::NotRunning)
+        {
+            currentProcess->kill();
+            currentProcess->waitForFinished();
+        }
+        delete currentProcess;
+    }
+}
+
+/****************************************************************
+ * @brief Sets the virtual environment path.
+ ***************************************************************/
+void TerminalEngine::setVenvPath(const QString &path)
+{
+    venvPath = path;
+}
+
+/****************************************************************
+ * @brief Gets the current virtual environment path.
+ ***************************************************************/
+QString TerminalEngine::getVenvPath() const
+{
+    return venvPath;
+}
+
+/****************************************************************
+ * @brief Sets the global Python command based on Settings version.
+ *        Validates actual interpreter version and warns if mismatch.
+ * @param versionFromSettings Version string (e.g., "3.10 or 3.11").
+ ***************************************************************/
+/****************************************************************
+ * @brief Sets the Python command based on Settings or defaults.
+ *        Probes the actual interpreter version and handles
+ *        mismatches by prompting the user to install or switch.
+ *
+ * @param versionFromSettings The Python version string from Settings.
+ ***************************************************************/
+void TerminalEngine::setPythonCommand(const QString &versionFromSettings)
+{
+    g_pythonExe.clear();
+    g_pythonBaseArgs.clear();
+
+#ifdef Q_OS_WIN
+    QString pyPath = QStandardPaths::findExecutable("py");
+    if (!pyPath.isEmpty())
+    {
+        g_pythonExe = pyPath;
+        g_pythonBaseArgs << (versionFromSettings.isEmpty() ? "-3" : "-" + versionFromSettings);
+    }
+    else
+    {
+        QString pythonPath = QStandardPaths::findExecutable("python");
+        g_pythonExe = pythonPath.isEmpty() ? "python" : pythonPath;
+    }
+#else
+    g_pythonExe = versionFromSettings.isEmpty()
+                      ? "python3"
+                      : QString("python%1").arg(versionFromSettings);
+#endif
+
+    // Probe actual version
+    QProcess proc;
+    proc.start(g_pythonExe, g_pythonBaseArgs + QStringList{"--version"});
+    proc.waitForFinished(3000);
+    QString output = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+
+    if (!versionFromSettings.isEmpty() && !output.contains(versionFromSettings))
+    {
+        // Detect available versions
+        QStringList detectedVersions;
+        QStringList candidates = {"python3.10", "python3.11", "python3.12", "python3.13", "python"};
+
+        // FIX: use index-based loop to avoid detach warning
+        for (int i = 0; i < candidates.size(); ++i)
+        {
+            const QString &candidate = candidates.at(i);
+            QString exe = QStandardPaths::findExecutable(candidate);
+            if (!exe.isEmpty())
+            {
+                QProcess p;
+                p.start(exe, {"--version"});
+                p.waitForFinished(2000);
+                QString verOut = QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+                if (!verOut.isEmpty())
+                {
+                    detectedVersions << verOut;
+                }
+            }
+        }
+
+        // Load configured default version from Settings
+        QSettings settings;
+        QString defaultVersion = settings.value("PythonVersion", "3.10").toString();
+
+        QMessageBox msgBox;
+        msgBox.setWindowTitle(tr("Python Version Mismatch"));
+        msgBox.setText(tr("Requested Python %1, but found %2.")
+                           .arg(versionFromSettings, output));
+        msgBox.setInformativeText(tr("Choose an action:"));
+
+        QPushButton *installBtn = msgBox.addButton(
+            tr("Install Python %1").arg(defaultVersion),
+            QMessageBox::ActionRole);
+
+        QVector<QPushButton*> switchButtons;
+        for (int i = 0; i < detectedVersions.size(); ++i)
+        {
+            const QString &ver = detectedVersions.at(i);
+            QPushButton *btn = msgBox.addButton(
+                tr("Switch default to %1").arg(ver),
+                QMessageBox::ActionRole);
+            switchButtons.append(btn);
+        }
+
+        msgBox.addButton(QMessageBox::Cancel);
+        msgBox.exec();
+
+        if (msgBox.clickedButton() == installBtn)
+        {
+            // Build installer URL dynamically
+            QString installerUrl = QString("https://www.python.org/ftp/python/%1.0/python-%1.0-amd64.exe")
+                                       .arg(defaultVersion);
+            QDesktopServices::openUrl(QUrl(installerUrl));
+
+            // Update Settings to reflect chosen default
+            settings.setValue("PythonVersion", defaultVersion);
+            settings.sync();
+        }
+        else
+        {
+            for (int i = 0; i < switchButtons.size(); ++i)
+            {
+                if (msgBox.clickedButton() == switchButtons[i])
+                {
+                    QString chosenVersion = detectedVersions[i].section(' ', 1, 1);
+                    settings.setValue("PythonVersion", chosenVersion);
+                    settings.sync();
+
+                    // Re‑apply with new version
+                    TerminalEngine::setPythonCommand(chosenVersion);
+                    break;
+                }
+            }
+        }
+    }
+
+    DEBUG_MSG() << "[DEBUG] setPythonCommand resolved:" << g_pythonExe << g_pythonBaseArgs << "Reported:" << output;
+}
+
+/****************************************************************
+ * @brief Returns base args (e.g., -3.11).
+ ***************************************************************/
+QStringList TerminalEngine::pythonBaseArgs()
+{
+    return g_pythonBaseArgs;
+}
+
+/****************************************************************
+ * @brief Creates a Python virtual environment and upgrades pip/pip-tools.
+ *        Handles both Windows launcher (py.exe) and direct python.exe.
+ *        Removes any existing venv first, then runs the command.
+ *
+ * @param pythonVersion Version selector (e.g. "-3.10") if using py.exe
+ * @return true if venv created successfully, false otherwise
+ ***************************************************************/
+bool TerminalEngine::createVirtualEnvironment(const QString &pythonVersion)
+{
+    DEBUG_MSG() << "Enter createVirtualEnvironment()";
+    DEBUG_MSG() << "Target venv path:" << venvPath;
+
+    emit venvProgress("Checking for existing virtual environment...");
+
+    if (venvExists())
+    {
+        DEBUG_MSG() << "Existing venv found, removing...";
+        if (!removeVirtualEnvironment())
+        {
+            emit outputReceived("Failed to remove existing virtual environment", true);
+            return false;
+        }
+    }
+
+    QString pythonExe = pythonCommand();
+    QStringList args = pythonBaseArgs();
+
+    if (pythonExe.contains("py.exe", Qt::CaseInsensitive) && !pythonVersion.isEmpty())
+    {
+        DEBUG_MSG() << "Detected py.exe → adding version selector:" << pythonVersion;
+        args << pythonVersion << "-m" << "venv" << venvPath;
+    }
+    else
+    {
+        DEBUG_MSG() << "Detected direct python interpreter → no version selector";
+        args << "-m" << "venv" << venvPath;
+    }
+
+    DEBUG_MSG() << "Using Python executable:" << pythonExe;
+    DEBUG_MSG() << "Command line:" << pythonExe << args;
+
+    QProcess process;
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start(pythonExe, args);
+
+    if (!process.waitForStarted(5000))
+    {
+        emit outputReceived("Failed to start Python process", true);
+        return false;
+    }
+
+    bool finished = process.waitForFinished(60000);
+
+    QString stdOut = QString::fromUtf8(process.readAllStandardOutput());
+    QString stdErr = QString::fromUtf8(process.readAllStandardError());
+
+    DEBUG_MSG() << "Process finished:" << finished
+                << " Exit code:" << process.exitCode()
+                << " Exit status:" << process.exitStatus()
+                << " Error:" << process.error();
+    DEBUG_MSG() << "StdOut:" << stdOut;
+    DEBUG_MSG() << "StdErr:" << stdErr;
+
+    if (!finished || process.exitCode() != 0 || !venvExists())
+    {
+        emit outputReceived(QString("Failed to create virtual environment: %1").arg(stdErr), true);
+        return false;
+    }
+
+    emit venvProgress("Virtual environment created successfully");
+
+    // 🔧 NEW STEP: upgrade pip and install pip-tools
+    QString venvPython = venvPath + "/Scripts/python.exe"; // Windows path
+    QStringList upgradeArgs;
+    upgradeArgs << "-m" << "pip" << "install" << "--upgrade" << "pip" << "pip-tools";
+
+    DEBUG_MSG() << "Upgrading pip and installing pip-tools...";
+    QProcess upgradeProc;
+    upgradeProc.setProcessChannelMode(QProcess::MergedChannels);
+    upgradeProc.start(venvPython, upgradeArgs);
+    upgradeProc.waitForFinished(60000);
+
+    QString upgradeOut = QString::fromUtf8(upgradeProc.readAllStandardOutput());
+    QString upgradeErr = QString::fromUtf8(upgradeProc.readAllStandardError());
+
+    DEBUG_MSG() << "Upgrade StdOut:" << upgradeOut;
+    DEBUG_MSG() << "Upgrade StdErr:" << upgradeErr;
+
+    if (upgradeProc.exitCode() != 0)
+    {
+        emit outputReceived(QString("pip upgrade failed: %1").arg(upgradeErr), true);
+        return false;
+    }
+
+    emit venvProgress("pip and pip-tools upgraded successfully");
+    return true;
+}
+
+/****************************************************************
+ * @brief Attempts to activate the virtual environment by probing python.
+ * @return true if activation succeeds, false otherwise.
+ ***************************************************************/
+bool TerminalEngine::activateVenv()
+{
+    DEBUG_MSG() << "Enter activateVenv()";
+
+    // Use global Python command resolved at startup
+    QString pythonExe = TerminalEngine::pythonCommand();
+    QStringList args = TerminalEngine::pythonBaseArgs();
+    args << "--version";
+
+    DEBUG_MSG() << "Activation probe:" << pythonExe << args;
+
+    QProcess proc;
+    proc.start(pythonExe, args);
+
+    if (!proc.waitForStarted(5000))
+    {
+        DEBUG_MSG() << "Activation probe failed to start:" << proc.errorString();
+        return false;
+    }
+
+    bool finished = proc.waitForFinished(10000);
+    QString stdOut = QString::fromUtf8(proc.readAllStandardOutput());
+    QString stdErr = QString::fromUtf8(proc.readAllStandardError());
+
+    DEBUG_MSG() << "Finished:" << finished
+                          << "Exit code:" << proc.exitCode()
+                          << "StdOut:" << stdOut
+                          << "StdErr:" << stdErr;
+
+    if (!finished || proc.exitCode() != 0)
+    {
+        return false;
+    }
+
+    // If we got a version string back, consider activation successful
+    return !stdOut.isEmpty() || !stdErr.isEmpty();
+}
+
+
+/****************************************************************
+ * @brief Gets venv status information.
+ * @return Status string describing venv state.
+ ***************************************************************/
+QString TerminalEngine::getVenvStatus() const
+{
+    if (!venvExists())
+    {
+        return QString("venv: missing (%1)").arg(venvPath);
+    }
+
+    QFileInfo pyInfo(getPythonExecutable());
+    QFileInfo pipInfo(getPipExecutable());
+
+    QStringList parts;
+    parts << QString("venv: present (%1)").arg(venvPath);
+    parts << QString("python: %1 %2").arg(pyInfo.exists() ? "OK" : "MISSING").arg(pyInfo.filePath());
+    parts << QString("pip: %1 %2").arg(pipInfo.exists() ? "OK" : "MISSING").arg(pipInfo.filePath());
+
+    return parts.join(" | ");
+}
+
+/****************************************************************
+ * @brief Checks if virtual environment exists.
+ ***************************************************************/
+bool TerminalEngine::venvExists() const
+{
+    QFileInfo venvInfo(venvPath);
+    if (!venvInfo.exists() || !venvInfo.isDir())
+    {
+        return false;
+    }
+
+    // Check for Python executable
+    QString pythonExe = getPythonExecutable();
+    QFileInfo pythonInfo(pythonExe);
+    return pythonInfo.exists() && pythonInfo.isFile();
+}
+
+/****************************************************************
+ * @brief Upgrades pip inside the virtual environment.
+ * @return true if successful, false otherwise.
+ ***************************************************************/
+bool TerminalEngine::upgradePip()
+{
+    QStringList args = TerminalEngine::pythonBaseArgs();
+    args << "-m" << "pip" << "install" << "--upgrade" << "pip";
+    QString pythonExe = TerminalEngine::pythonCommand();
+
+    DEBUG_MSG() << "Upgrading pip with:" << pythonExe << args;
+
+    QProcess proc;
+    proc.start(pythonExe, args);
+    proc.waitForFinished(30000);
+
+    DEBUG_MSG() << "Exit code:" << proc.exitCode() << "StdErr:" << QString::fromUtf8(proc.readAllStandardError());
+
+    return proc.exitCode() == 0;
+}
+
+/****************************************************************
+ * @brief Installs pip-tools in the virtual environment.
+ ***************************************************************/
+bool TerminalEngine::installPipTools(const QString &version)
+{
+    if (!venvExists())
+    {
+        emit outputReceived("Virtual environment does not exist", true);
+        return false;
+    }
+
+    QString pythonExe = getPythonExecutable();
+    QStringList args;
+    args << "-m" << "pip" << "install";
+
+    if (version.isEmpty())
+    {
+        args << "pip-tools";
+    }
+    else
+    {
+        args << QString("pip-tools==%1").arg(version);
+    }
+
+    QProcess process;
+    process.start(pythonExe, args);
+    process.waitForFinished(120000); // 2 minute timeout
+
+    QString output = process.readAllStandardOutput();
+    QString error = process.readAllStandardError();
+
+    emit outputReceived(output, false);
+    if (!error.isEmpty())
+    {
+        emit outputReceived(error, true);
+    }
+
+    return process.exitCode() == 0;
+}
+
+/****************************************************************
+ * @brief Executes a command in the terminal.
+ ***************************************************************/
+void TerminalEngine::executeCommand(const QString &command)
+{
+    QString cmd = command.trimmed();
+    if (cmd.isEmpty())
+    {
+        emit outputReceived("No command entered", true);
+        return;
+    }
+
+    currentCommand = cmd;
+    emit commandStarted(currentCommand);
+
+    logMessage(QString("$ %1").arg(currentCommand));
+
+    parseAndExecuteCommand(currentCommand);
+}
+
+/****************************************************************
+ * @brief Stops the currently running process.
+ ***************************************************************/
+void TerminalEngine::stopCurrentProcess()
+{
+    if (currentProcess && currentProcess->state() != QProcess::NotRunning)
+    {
+        emit outputReceived("Terminating process...", false);
+        currentProcess->kill();
+        currentProcess->waitForFinished();
+        emit outputReceived("Process terminated", false);
+    }
+}
+
+/****************************************************************
+ * @brief Gets the Python executable path for the venv.
+ ***************************************************************/
+QString TerminalEngine::getPythonExecutable() const
+{
+#if defined(Q_OS_WIN)
+    return QDir(venvPath).filePath("Scripts/python.exe");
+#else
+    return QDir(venvPath).filePath("bin/python");
+#endif
+}
+
+/****************************************************************
+ * @brief Gets the pip executable path for the venv.
+ ***************************************************************/
+QString TerminalEngine::getPipExecutable() const
+{
+#if defined(Q_OS_WIN)
+    return QDir(venvPath).filePath("Scripts/pip.exe");
+#else
+    return QDir(venvPath).filePath("bin/pip");
+#endif
+}
+
+/****************************************************************
+ * @brief Slot for standard output ready.
+ ***************************************************************/
+void TerminalEngine::onReadyReadStandardOutput()
+{
+    if (currentProcess)
+    {
+        QString output = QString::fromUtf8(currentProcess->readAllStandardOutput());
+        emit outputReceived(output, false);
+    }
+}
+
+/****************************************************************
+ * @brief Slot for standard error ready.
+ ***************************************************************/
+void TerminalEngine::onReadyReadStandardError()
+{
+    if (currentProcess)
+    {
+        QString error = QString::fromUtf8(currentProcess->readAllStandardError());
+        emit outputReceived(error, true);
+    }
+}
+
+/****************************************************************
+ * @brief Slot for process finished.
+ ***************************************************************/
+void TerminalEngine::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    if (exitStatus == QProcess::CrashExit)
+    {
+        emit outputReceived("Process crashed", true);
+    }
+    else if (exitCode != 0)
+    {
+        emit outputReceived(QString("Process exited with code %1").arg(exitCode), true);
+    }
+
+    emit commandFinished(exitCode, exitStatus);
+}
+
+/****************************************************************
+ * @brief Slot for process error.
+ ***************************************************************/
+void TerminalEngine::onProcessError(QProcess::ProcessError error)
+{
+    QString errorMsg;
+    switch (error)
+    {
+    case QProcess::FailedToStart:
+        errorMsg = "Failed to start process";
+        break;
+    case QProcess::Crashed:
+        errorMsg = "Process crashed";
+        break;
+    case QProcess::Timedout:
+        errorMsg = "Process timed out";
+        break;
+    case QProcess::WriteError:
+        errorMsg = "Write error";
+        break;
+    case QProcess::ReadError:
+        errorMsg = "Read error";
+        break;
+    default:
+        errorMsg = "Unknown error";
+        break;
+    }
+
+    emit outputReceived(errorMsg, true);
+}
+
+/****************************************************************
+ * @brief Parses and routes the command to appropriate handler.
+ ***************************************************************/
+void TerminalEngine::parseAndExecuteCommand(const QString &command)
+{
+    // Make a copy to ensure we have a stable string
+    QString cmd = command;
+
+    // Check for pip commands
+    if (cmd.startsWith("pip "))
+    {
+        QStringList parts = cmd.split(' ', Qt::SkipEmptyParts);
+        parts.removeFirst(); // Remove "pip"
+        executePipCommand(parts);
+    }
+    // Check for pip-compile
+    else if (cmd.startsWith("pip-compile"))
+    {
+        QStringList parts = cmd.split(' ', Qt::SkipEmptyParts);
+        parts.removeFirst(); // Remove "pip-compile"
+        executePipToolsCommand("compile", parts);
+    }
+    // Check for pip-sync
+    else if (cmd.startsWith("pip-sync"))
+    {
+        QStringList parts = cmd.split(' ', Qt::SkipEmptyParts);
+        parts.removeFirst(); // Remove "pip-sync"
+        executePipToolsCommand("sync", parts);
+    }
+    // Check for python commands
+    else if (cmd.startsWith("python "))
+    {
+        QStringList parts = cmd.split(' ', Qt::SkipEmptyParts);
+        parts.removeFirst(); // Remove "python"
+        executePythonScript(parts);
+    }
+    // Check for venv activation (informational only)
+    else if (cmd == "activate" || cmd.contains("activate"))
+    {
+        emit outputReceived("Note: Virtual environment is automatically active in this terminal", false);
+        emit outputReceived(QString("Using venv: %1").arg(venvPath), false);
+        emit commandFinished(0, QProcess::NormalExit);
+    }
+    // Check for deactivate (informational only)
+    else if (cmd == "deactivate")
+    {
+        emit outputReceived("Note: Virtual environment cannot be deactivated in this terminal", false);
+        emit commandFinished(0, QProcess::NormalExit);
+    }
+    // Shell commands
+    else
+    {
+        executeShellCommand(cmd);
+    }
+}
+
+/****************************************************************
+ * @brief Executes a pip command.
+ ***************************************************************/
+void TerminalEngine::executePipCommand(const QStringList &args)
+{
+    if (!venvExists())
+    {
+        emit outputReceived("Virtual environment does not exist. Create one first.", true);
+        emit commandFinished(1, QProcess::NormalExit);
+        return;
+    }
+
+    if (currentProcess)
+    {
+        delete currentProcess;
+    }
+
+    currentProcess = new QProcess(this);
+    connect(currentProcess, &QProcess::readyReadStandardOutput, this, &TerminalEngine::onReadyReadStandardOutput);
+    connect(currentProcess, &QProcess::readyReadStandardError, this, &TerminalEngine::onReadyReadStandardError);
+    connect(currentProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &TerminalEngine::onProcessFinished);
+    connect(currentProcess, &QProcess::errorOccurred, this, &TerminalEngine::onProcessError);
+
+    QString pythonExe = getPythonExecutable();
+    QStringList fullArgs;
+    fullArgs << "-m" << "pip" << args;
+
+    currentProcess->start(pythonExe, fullArgs);
+}
+
+/****************************************************************
+ * @brief Executes a pip-tools command.
+ ***************************************************************/
+void TerminalEngine::executePipToolsCommand(const QString &tool, const QStringList &args)
+{
+    if (!venvExists())
+    {
+        emit outputReceived("Virtual environment does not exist. Create one first.", true);
+        emit commandFinished(1, QProcess::NormalExit);
+        return;
+    }
+
+    if (currentProcess)
+    {
+        delete currentProcess;
+    }
+
+    currentProcess = new QProcess(this);
+    connect(currentProcess, &QProcess::readyReadStandardOutput, this, &TerminalEngine::onReadyReadStandardOutput);
+    connect(currentProcess, &QProcess::readyReadStandardError, this, &TerminalEngine::onReadyReadStandardError);
+    connect(currentProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &TerminalEngine::onProcessFinished);
+    connect(currentProcess, &QProcess::errorOccurred, this, &TerminalEngine::onProcessError);
+
+    QString pythonExe = getPythonExecutable();
+    QStringList fullArgs;
+    fullArgs << "-m" << "piptools" << tool << args;
+
+    currentProcess->start(pythonExe, fullArgs);
+}
+
+/****************************************************************
+ * @brief Executes a Python script.
+ ***************************************************************/
+void TerminalEngine::executePythonScript(const QStringList &args)
+{
+    if (!venvExists())
+    {
+        emit outputReceived("Virtual environment does not exist. Create one first.", true);
+        emit commandFinished(1, QProcess::NormalExit);
+        return;
+    }
+
+    if (currentProcess)
+    {
+        delete currentProcess;
+    }
+
+    currentProcess = new QProcess(this);
+    connect(currentProcess, &QProcess::readyReadStandardOutput, this, &TerminalEngine::onReadyReadStandardOutput);
+    connect(currentProcess, &QProcess::readyReadStandardError, this, &TerminalEngine::onReadyReadStandardError);
+    connect(currentProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &TerminalEngine::onProcessFinished);
+    connect(currentProcess, &QProcess::errorOccurred, this, &TerminalEngine::onProcessError);
+
+    QString pythonExe = getPythonExecutable();
+    currentProcess->start(pythonExe, args);
+}
+
+/****************************************************************
+ * @brief Executes a shell command.
+ ***************************************************************/
+void TerminalEngine::executeShellCommand(const QString &command)
+{
+    if (currentProcess)
+    {
+        delete currentProcess;
+    }
+
+    currentProcess = new QProcess(this);
+    connect(currentProcess, &QProcess::readyReadStandardOutput, this, &TerminalEngine::onReadyReadStandardOutput);
+    connect(currentProcess, &QProcess::readyReadStandardError, this, &TerminalEngine::onReadyReadStandardError);
+    connect(currentProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, &TerminalEngine::onProcessFinished);
+    connect(currentProcess, &QProcess::errorOccurred, this, &TerminalEngine::onProcessError);
+
+    QString shell = getShell();
+    QStringList shellArgs = getShellArgs(command);
+
+    currentProcess->start(shell, shellArgs);
+}
+
+/****************************************************************
+ * @brief Removes existing virtual environment.
+ ***************************************************************/
+bool TerminalEngine::removeVirtualEnvironment()
+{
+    if (!venvExists())
+    {
+        return true; // Already doesn't exist
+    }
+
+    QDir venvDir(venvPath);
+    return venvDir.removeRecursively();
+}
+
+/****************************************************************
+ * @brief Gets the platform-specific shell.
+ ***************************************************************/
+QString TerminalEngine::getShell() const
+{
+#if defined(Q_OS_WIN)
+    return "cmd.exe";
+#else
+    return "bash";
+#endif
+}
+
+/****************************************************************
+ * @brief Gets shell arguments for command execution.
+ ***************************************************************/
+QStringList TerminalEngine::getShellArgs(const QString &command) const
+{
+    QStringList args;
+#if defined(Q_OS_WIN)
+    args << "/C" << command;
+#else
+    args << "-c" << command;
+#endif
+    return args;
+}
+
+/****************************************************************
+ * @brief Logs a message with timestamp.
+ ***************************************************************/
+void TerminalEngine::logMessage(const QString &message, bool isError)
+{
+    QString timestamp = QDateTime::currentDateTime().toString("[HH:mm:ss]");
+    emit outputReceived(QString("%1 %2").arg(timestamp, message), isError);
+}
+
+bool TerminalEngine::isCommandRunnable(const QString& command) const
+{
+    QProcess proc;
+    QStringList args;
+    args << QStringLiteral("--version");
+
+    proc.start(command, args);
+    bool started = proc.waitForStarted(3000);
+    if (!started)
+    {
+        return false;
+    }
+
+    bool finished = proc.waitForFinished(5000);
+    if (!finished)
+    {
+        proc.kill();
+        proc.waitForFinished(2000);
+        return false;
+    }
+
+    int exitCode = proc.exitCode();
+    return (exitCode == 0);
+}
+
+QString TerminalEngine::pythonCommand() const
+{
+    const QString configured = Settings::instance()->pythonInterpreter();
+
+    if (isCommandRunnable(configured))
+    {
+        return configured;
+    }
+
+    qWarning() << "Configured Python interpreter not runnable:" << configured;
+
+    const QString fallback = Settings::instance()->defaultPythonInterpreter();
+    if (isCommandRunnable(fallback))
+    {
+        qInfo() << "Falling back to default Python interpreter:" << fallback;
+        return fallback;
+    }
+
+    qCritical() << "No valid Python interpreter found. Update Settings or install the required version.";
+    return configured;
+}
+
+/****************************************************************
+ * @brief Returns the path to the Python executable inside a venv.
+ *        Handles Windows, Linux, and macOS layouts.
+ ***************************************************************/
+QString TerminalEngine::venvPythonPath(const QString& venvPath) const
+{
+#ifdef Q_OS_WIN
+    return QDir(venvPath).filePath("Scripts/python.exe");
+#else
+    return QDir(venvPath).filePath("bin/python3");
+#endif
+}
+
+/************** End of TerminalEngine.cpp ***********************/
+
+#-------------------------------------------------------------------------------
+# File: src/TerminalEngine.h
+#-------------------------------------------------------------------------------
+/****************************************************************
+ * @file TerminalEngine.h
+ * @brief Declares the TerminalEngine class for terminal operations.
+ *
+ * @author Jeffrey Scott Flesher
+ * @version 0.8
+ * @date    2025-11-04
+ * @section License MIT
+ * @section DESCRIPTION
+ * This file defines the TerminalEngine class for managing virtual
+ * environments, executing commands, and handling terminal I/O.
+ * Features:
+ *   - Virtual environment creation and management
+ *   - Cross-platform command execution
+ *   - Real-time output streaming
+ *   - Python, pip, and pip-tools command support
+ *   - Shell command execution
+ ***************************************************************/
+#ifndef TERMINALENGINE_H
+#define TERMINALENGINE_H
+
+#include <QObject>
+#include <QString>
+#include <QProcess>
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+#include <QDateTime>
+
+/****************************************************************
+ * @class TerminalEngine
+ * @brief Manages terminal operations and virtual environments.
+ ***************************************************************/
+class TerminalEngine : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit TerminalEngine(QObject *parent = nullptr);
+    ~TerminalEngine();
+
+    /****************************************************************
+     * @brief Sets Python command globally.
+     * @param Gets version From Settings.
+     ***************************************************************/
+    static void setPythonCommand(const QString &versionFromSettings);
+    static QStringList pythonBaseArgs();
+    /****************************************************************
+     * @brief Sets the virtual environment path.
+     * @param venvPath Absolute path to the virtual environment.
+     ***************************************************************/
+    void setVenvPath(const QString &venvPath);
+
+    /****************************************************************
+     * @brief Gets the current virtual environment path.
+     * @return The virtual environment path.
+     ***************************************************************/
+    QString getVenvPath() const;
+
+    /****************************************************************
+     * @brief Creates a new virtual environment.
+     * @param pythonVersion Python version to use (e.g., "3.11").
+     * @return true if successful, false otherwise.
+     ***************************************************************/
+    bool createVirtualEnvironment(const QString &pythonVersion);
+
+    /****************************************************************
+     * @brief Checks if virtual environment exists.
+     * @return true if venv exists, false otherwise.
+     ***************************************************************/
+    bool venvExists() const;
+
+    /****************************************************************
+     * @brief Activates an existing virtual environment.
+     * @return true if successful, false otherwise.
+     ***************************************************************/
+    bool activateVenv();
+
+    /****************************************************************
+     * @brief Gets venv status information.
+     * @return Status string describing venv state.
+     ***************************************************************/
+    QString getVenvStatus() const;
+
+    /****************************************************************
+     * @brief Upgrades pip in the virtual environment.
+     * @return true if successful, false otherwise.
+     ***************************************************************/
+    bool upgradePip();
+
+    /****************************************************************
+     * @brief Installs pip-tools in the virtual environment.
+     * @param version Specific pip-tools version or empty for latest.
+     * @return true if successful, false otherwise.
+     ***************************************************************/
+    bool installPipTools(const QString &version = QString());
+
+    /****************************************************************
+     * @brief Executes a command in the terminal.
+     * @param command The command to execute.
+     ***************************************************************/
+    void executeCommand(const QString &command);
+
+    /****************************************************************
+     * @brief Stops the currently running process.
+     ***************************************************************/
+    void stopCurrentProcess();
+
+    /****************************************************************
+     * @brief Gets the Python executable path for the venv.
+     * @return Path to Python executable.
+     ***************************************************************/
+    QString getPythonExecutable() const;
+
+    /****************************************************************
+     * @brief Gets the pip executable path for the venv.
+     * @return Path to pip executable.
+     ***************************************************************/
+    QString getPipExecutable() const;
+    /****************************************************************
+     * @brief Resolve the Python interpreter command for execution.
+     * @return Validated Python interpreter command (name or path).
+     ***************************************************************/
+    QString pythonCommand() const;
+    QString venvPythonPath(const QString &venvPath) const;
+    QString venvPath;
+
+signals:
+    /****************************************************************
+     * @brief Emitted when output is available.
+     * @param output The output text.
+     * @param isError true if error output, false for standard output.
+     ***************************************************************/
+    void outputReceived(const QString &output, bool isError);
+
+    /****************************************************************
+     * @brief Emitted when a command starts executing.
+     * @param command The command being executed.
+     ***************************************************************/
+    void commandStarted(const QString &command);
+
+    /****************************************************************
+     * @brief Emitted when a command finishes.
+     * @param exitCode The process exit code.
+     * @param exitStatus The process exit status.
+     ***************************************************************/
+    void commandFinished(int exitCode, QProcess::ExitStatus exitStatus);
+
+    /****************************************************************
+     * @brief Emitted when venv creation progress updates.
+     * @param message Progress message.
+     ***************************************************************/
+    void venvProgress(const QString &message);
+
+private slots:
+    void onReadyReadStandardOutput();
+    void onReadyReadStandardError();
+    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void onProcessError(QProcess::ProcessError error);
+
+private:
+    /****************************************************************
+     * @brief Checks if a command is runnable by invoking --version.
+     * @param command Interpreter command (name or absolute path).
+     * @return true if process starts and returns exit code 0.
+     ***************************************************************/
+    bool isCommandRunnable(const QString& command) const;
+    /****************************************************************
+     * @brief Parses and routes the command to appropriate handler.
+     * @param command The command to parse.
+     ***************************************************************/
+    void parseAndExecuteCommand(const QString &command);
+
+    /****************************************************************
+     * @brief Executes a pip command.
+     * @param args Arguments for pip command.
+     ***************************************************************/
+    void executePipCommand(const QStringList &args);
+
+    /****************************************************************
+     * @brief Executes a pip-tools command (pip-compile, pip-sync).
+     * @param tool The tool name (compile or sync).
+     * @param args Additional arguments.
+     ***************************************************************/
+    void executePipToolsCommand(const QString &tool, const QStringList &args);
+
+    /****************************************************************
+     * @brief Executes a Python script.
+     * @param args Arguments including script path.
+     ***************************************************************/
+    void executePythonScript(const QStringList &args);
+
+    /****************************************************************
+     * @brief Executes a shell command.
+     * @param command The shell command.
+     ***************************************************************/
+    void executeShellCommand(const QString &command);
+
+    /****************************************************************
+     * @brief Removes existing virtual environment.
+     * @return true if successful, false otherwise.
+     ***************************************************************/
+    bool removeVirtualEnvironment();
+
+    /****************************************************************
+     * @brief Gets the platform-specific shell.
+     * @return Shell executable name.
+     ***************************************************************/
+    QString getShell() const;
+
+    /****************************************************************
+     * @brief Gets shell arguments for command execution.
+     * @param command The command to execute.
+     * @return List of shell arguments.
+     ***************************************************************/
+    QStringList getShellArgs(const QString &command) const;
+
+    /****************************************************************
+     * @brief Logs a message with timestamp.
+     * @param message The message to log.
+     * @param isError true if error message.
+     ***************************************************************/
+    void logMessage(const QString &message, bool isError = false);
+
+    QProcess *currentProcess;
+    QString currentCommand;
+    static QString g_pythonExe;
+    static QStringList g_pythonBaseArgs;
+
+};
+
+#endif // TERMINALENGINE_H
+/************** End of TerminalEngine.h *************************/
+
+#-------------------------------------------------------------------------------
 # File: src/main.cpp
 #-------------------------------------------------------------------------------
 #include <QApplication>
 #include <QTranslator>
 #include <QLocale>
 #include <QFile>
-#include <QDebug>
 #include <QIcon>
+#include <QDebug>
 #include "MainWindow.h"
+#include "Config.h"
+
+#define SHOW_DEBUG 0
 
 int main(int argc, char *argv[])
 {
@@ -3560,8 +5275,7 @@ int main(int argc, char *argv[])
     QApplication::setWindowIcon(QIcon(":/icons/icons/app.svg"));
 
     // Diagnostics
-    qDebug() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
-
+    DEBUG_MSG() << "[RESOURCE CHECK] :/icons/icons/open.svg exists:" << QFile::exists(":/icons/icons/open.svg");
     // Translation loading
     const QString languageCode = QLocale::system().name().split('_').first();
     auto loadTranslator = [&](const QString &baseName) -> bool
@@ -3697,7 +5411,7 @@ TEST(ResolverEngineTest, BasicSanity)
 # Directory Structure
 #-------------------------------------------------------------------------------
 ├── .qtcreator
-│   ├── qtc-cmake-presets-NtZsHeFT
+│   ├── qtc-cmake-presets-YJOCrMpg
 │   └── CMakeLists.txt.user
 ├── icons
 │   ├── app.svg
@@ -3715,9 +5429,15 @@ TEST(ResolverEngineTest, BasicSanity)
 ├── src
 │   ├── CommandsTab.cpp
 │   ├── CommandsTab.h
+│   ├── Config.h
+│   ├── Constants.h
 │   ├── MainWindow.cpp
 │   ├── MainWindow.h
 │   ├── MainWindow.ui
+│   ├── Settings.cpp
+│   ├── Settings.h
+│   ├── TerminalEngine.cpp
+│   ├── TerminalEngine.h
 │   └── main.cpp
 ├── tests
 │   ├── gtest_resolver.cpp
@@ -3739,12 +5459,14 @@ TEST(ResolverEngineTest, BasicSanity)
 │   ├── PipMatrixResolverQt_en.ts
 │   ├── PipMatrixResolverQt_es.qm
 │   └── PipMatrixResolverQt_es.ts
+├── .clang-format
 ├── .gitignore
 ├── CMakeLists.txt
 ├── Installation.txt
 ├── LICENSE
 ├── PipMatrixResolverQt.qrc
 ├── README.md
+├── Terminal.Upgrade.Summary.txt
 ├── The.Plan.txt
 ├── cleanbash.sh
 ├── mainwindow_cpp.txt
